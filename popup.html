@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fix Errors Settings</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding: 1rem;
+        width: 350px;
+        margin: 0;
+        color: #333;
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #1a73e8;
+      }
+
+      .view-container {
+        display: none;
+      }
+      .active {
+        display: block;
+      }
+
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      input[type="password"] {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .nav-buttons {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      button {
+        padding: 8px 12px;
+        cursor: pointer;
+        border: 1px solid #1a73e8;
+        background: white;
+        color: #1a73e8;
+        border-radius: 4px;
+      }
+
+      button.primary {
+        background: #1a73e8;
+        color: white;
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+
+      .history-item {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        font-size: 0.9rem;
+      }
+
+      .history-original {
+        color: #888;
+        text-decoration: line-through;
+        margin-bottom: 4px;
+      }
+      .history-fixed {
+        color: #2e7d32;
+        font-weight: 500;
+      }
+      .history-timestamp {
+        font-size: 0.75rem;
+        color: #bbb;
+        display: block;
+        margin-top: 4px;
+      }
+
+      .history-actions {
+        margin-top: 8px;
+        display: flex;
+        gap: 8px;
+      }
+      .copy-btn {
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        border: 1px solid #ddd;
+        background: #fff;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #555;
+      }
+      .copy-btn:hover {
+        background: #f5f5f5;
+        border-color: #bbb;
+      }
+      .copy-btn.success {
+        border-color: #2e7d32;
+        color: #2e7d32;
+      }
+
+      #history-list {
+        max-height: 400px;
+        overflow-y: auto;
+        background: #fafafa;
+        border-radius: 4px;
+      }
+
+      .empty-state {
+        padding: 20px;
+        text-align: center;
+        color: #888;
+        font-style: italic;
+      }
+
+      .shortcut-badge {
+        display: inline-block;
+        background: #f1f3f4;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        padding: 3px 8px;
+        font-family: monospace;
+        font-size: 0.9rem;
+        color: #333;
+      }
+
+      .shortcut-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+      }
+
+      .shortcut-label {
+        font-size: 0.9rem;
+        color: #555;
+      }
+
+      .info-box {
+        background: #e8f0fe;
+        border-left: 3px solid #1a73e8;
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 0.8rem;
+        color: #444;
+        margin-top: 14px;
+        line-height: 1.5;
+      }
+
+      .info-box code {
+        background: #fff;
+        border: 1px solid #c5cae9;
+        border-radius: 3px;
+        padding: 1px 4px;
+        font-size: 0.8rem;
+      }
+
+      .prompts-note {
+        font-size: 0.78rem;
+        color: #555;
+        margin: 0 0 10px;
+      }
+      .prompts-note code {
+        background: #f1f3f4;
+        border: 1px solid #dadce0;
+        border-radius: 3px;
+        padding: 1px 4px;
+        font-size: 0.78rem;
+      }
+
+      #prompts-list {
+        max-height: 360px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+      }
+
+      .prompt-item {
+        margin-bottom: 10px;
+      }
+      .prompt-item label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 3px;
+        display: block;
+      }
+      .prompt-item textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 0.72rem;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        resize: vertical;
+        line-height: 1.4;
+        color: #333;
+      }
+      .prompt-item textarea:focus {
+        outline: none;
+        border-color: #1a73e8;
+      }
+
+      .prompts-actions {
+        display: flex;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-buttons">
+      <button id="view-settings-btn" class="primary">Settings</button>
+      <button id="view-history-btn">History</button>
+      <button id="view-shortcuts-btn">Shortcuts</button>
+      <button id="view-prompts-btn">Prompts</button>
+    </div>
+
+    <hr />
+
+    <div id="settings-view" class="view-container active">
+      <h2>Gemini Configuration</h2>
+      <div class="form-group">
+        <label for="apiKey">API Key (Gemini API)</label>
+        <input
+          type="password"
+          id="apiKey"
+          placeholder="Enter your Gemini API key"
+        />
+      </div>
+      <button id="save-btn" class="primary">Save Configuration</button>
+      <p style="font-size: 0.8rem; color: #666; margin-top: 15px">
+        <b>Rules:</b> Select text on any page, right click, and choose "Fix
+        typos and grammar".<br /><br />
+        <b>Translation:</b> Append <i>"en to pl"</i> or <i>"ua to en"</i> at the
+        end of selection to translate.
+      </p>
+    </div>
+
+    <div id="history-view" class="view-container">
+      <h2>Update History</h2>
+      <div id="history-list">
+        <!-- History will be injected here -->
+      </div>
+      <button
+        id="clear-history-btn"
+        style="margin-top: 10px; border-color: #d32f2f; color: #d32f2f"
+      >
+        Clear All
+      </button>
+    </div>
+
+    <div id="shortcuts-view" class="view-container">
+      <h2>Keyboard Shortcuts</h2>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Fix spelling &amp; grammar</span>
+        <span class="shortcut-badge" id="shortcut-fix-grammar">Loading…</span>
+      </div>
+      <div class="info-box">
+        The default shortcut is <code>Alt+Shift+F</code>.<br /><br />
+        To change it, go to <code>chrome://extensions/shortcuts</code> in your
+        browser, find <strong>Fix Errors AI</strong>, and click the pencil icon
+        next to the shortcut.
+      </div>
+    </div>
+
+    <div id="prompts-view" class="view-container">
+      <h2>Prompts</h2>
+      <p class="prompts-note">
+        Customize the AI instructions for each tool. The selected text is
+        automatically appended at the end.
+      </p>
+      <div id="prompts-list">
+        <!-- Populated dynamically by popup.js -->
+      </div>
+      <div class="prompts-actions">
+        <button id="save-prompts-btn" class="primary">Save Prompts</button>
+        <button id="reset-prompts-btn">Reset to Defaults</button>
+      </div>
+    </div>
+
+    <script src="constants.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
