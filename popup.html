@@ -41,6 +41,15 @@
         border-radius: 4px;
       }
 
+      select {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #fff;
+      }
+
       .nav-buttons {
         display: flex;
         gap: 10px;
@@ -237,6 +246,14 @@
           id="apiKey"
           placeholder="Enter your Gemini API key"
         />
+      </div>
+      <div class="form-group">
+        <label for="modelSelect">Primary model</label>
+        <select id="modelSelect"></select>
+      </div>
+      <div class="form-group">
+        <label for="fallbackModelSelect">Fallback model (used on error)</label>
+        <select id="fallbackModelSelect"></select>
       </div>
       <button id="save-btn" class="primary">Save Configuration</button>
       <p style="font-size: 0.8rem; color: #666; margin-top: 15px">

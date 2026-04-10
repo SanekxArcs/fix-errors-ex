@@ -120,7 +120,12 @@ async function processTextWithAI(originalText, tab, action) {
     console.warn("Script injection failed (expected on some system pages):", e);
   }
 
-  const { geminiApiKey } = await chrome.storage.local.get("geminiApiKey");
+  const {
+    geminiApiKey,
+    geminiModel,
+    geminiFallbackModel
+  } = await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiFallbackModel"]);
+
   if (!geminiApiKey) {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -138,7 +143,13 @@ async function processTextWithAI(originalText, tab, action) {
   try {
     safeSendMessage(tab.id, { action: "showToast", message: "AI is working...", type: "working" });
 
-    const fixedText = await callGeminiAI(originalText, geminiApiKey, action);
+    const fixedText = await callGeminiAI(
+      originalText,
+      geminiApiKey,
+      action,
+      geminiModel || DEFAULT_GEMINI_MODEL,
+      geminiFallbackModel || ""
+    );
 
     const { history = [] } = await chrome.storage.local.get("history");
     const newEntry = {
@@ -158,28 +169,48 @@ async function processTextWithAI(originalText, tab, action) {
   }
 }
 
-async function callGeminiAI(text, apiKey, action) {
+async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "") {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
   const prompt = `${template}\n\nText: "${text}"`;
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error?.message || response.statusText);
+  const modelsToTry = [primaryModel];
+  if (fallbackModel && fallbackModel !== primaryModel) {
+    modelsToTry.push(fallbackModel);
   }
 
-  const data = await response.json();
-  const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!result) throw new Error("No response from AI");
-  return result.trim();
+  let lastError;
+
+  for (const model of modelsToTry) {
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || response.statusText);
+      }
+
+      const data = await response.json();
+      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!result) throw new Error("No response from AI");
+      return result.trim();
+    } catch (error) {
+      lastError = error;
+      console.warn(`Gemini model failed: ${model}`, error);
+    }
+  }
+
+  if (modelsToTry.length > 1) {
+    throw new Error(`Primary and fallback model failed. ${lastError?.message || "Unknown error"}`);
+  }
+
+  throw lastError || new Error("Gemini request failed");
 }

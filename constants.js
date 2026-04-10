@@ -31,3 +31,32 @@ const ACTION_LABELS = {
   formatMarkdown:    "Format → Markdown",
   formatSlack:       "Format → Slack message"
 };
+
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+const GEMINI_MODELS = [
+  {
+    id: "gemini-3.1-flash-lite-preview",
+    label: "gemini-3.1-flash-lite-preview"
+  },
+  {
+    id: "gemini-3-flash-preview",
+    label: "gemini-3-flash-preview"
+  },
+  {
+    id: "gemini-2.5-pro",
+    label: "gemini-2.5-pro"
+  },
+  {
+    id: "gemini-2.5-flash",
+    label: "gemini-2.5-flash"
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    label: "gemini-2.5-flash-lite"
+  },
+  {
+    id: "gemini-2.0-flash",
+    label: "gemini-2.0-flash (will be shut down June 1, 2026)"
+  }
+];

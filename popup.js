@@ -8,15 +8,51 @@ document.addEventListener("DOMContentLoaded", async () => {
   const shortcutsView = document.getElementById("shortcuts-view");
   const promptsView = document.getElementById("prompts-view");
   const apiKeyInput = document.getElementById("apiKey");
+  const modelSelect = document.getElementById("modelSelect");
+  const fallbackModelSelect = document.getElementById("fallbackModelSelect");
   const saveBtn = document.getElementById("save-btn");
   const historyList = document.getElementById("history-list");
   const clearHistoryBtn = document.getElementById("clear-history-btn");
 
+  function populateModelSelects() {
+    modelSelect.innerHTML = "";
+    fallbackModelSelect.innerHTML = "";
+
+    GEMINI_MODELS.forEach(model => {
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.label;
+      modelSelect.appendChild(option);
+    });
+
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "None";
+    fallbackModelSelect.appendChild(noneOption);
+
+    GEMINI_MODELS.forEach(model => {
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.label;
+      fallbackModelSelect.appendChild(option);
+    });
+  }
+
+  populateModelSelects();
+
   // Load API Key
-  const { geminiApiKey } = await chrome.storage.local.get("geminiApiKey");
+  const {
+    geminiApiKey,
+    geminiModel,
+    geminiFallbackModel
+  } = await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiFallbackModel"]);
+
   if (geminiApiKey) {
     apiKeyInput.value = geminiApiKey;
   }
+
+  modelSelect.value = geminiModel || DEFAULT_GEMINI_MODEL;
+  fallbackModelSelect.value = geminiFallbackModel || "";
 
   function switchView(activeView, activeBtn) {
     [settingsView, historyView, shortcutsView, promptsView].forEach(v => v.classList.remove("active"));
@@ -90,8 +126,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Save API Key
   saveBtn.addEventListener("click", async () => {
     const key = apiKeyInput.value.trim();
+    const selectedModel = modelSelect.value || DEFAULT_GEMINI_MODEL;
+    const selectedFallbackModel = fallbackModelSelect.value;
+
     if (key) {
-      await chrome.storage.local.set({ geminiApiKey: key });
+      await chrome.storage.local.set({
+        geminiApiKey: key,
+        geminiModel: selectedModel,
+        geminiFallbackModel: selectedFallbackModel
+      });
       alert("Settings saved!");
     } else {
       alert("Please enter a valid API Key.");
