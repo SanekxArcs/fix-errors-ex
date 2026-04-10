@@ -10,6 +10,18 @@ if (!window.lbxFixErrorsInjected) {
       showToast(request.message, request.type);
       if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "getSelection") {
+      const activeElement = document.activeElement;
+      if (request.autoSelectAll && activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable)) {
+        if (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA") {
+          activeElement.select();
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(activeElement);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
       const text = window.getSelection().toString();
       if (sendResponse) sendResponse({ text });
     }

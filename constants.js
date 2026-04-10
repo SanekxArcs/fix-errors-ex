@@ -34,6 +34,8 @@ const ACTION_LABELS = {
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
+const DEFAULT_LM_STUDIO_URL = "http://192.168.1.114:1234";
+
 const GEMINI_MODELS = [
   {
     id: "gemini-3.1-flash-lite-preview",

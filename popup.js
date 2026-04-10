@@ -1,3 +1,13 @@
+function showPopupToast(message, type = "success", duration = 3000) {
+  const toast = document.getElementById("popup-toast");
+  toast.textContent = message;
+  toast.className = "show " + type;
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.className = toast.className.replace("show", "").trim();
+  }, duration);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const settingsBtn = document.getElementById("view-settings-btn");
   const historyBtn = document.getElementById("view-history-btn");
@@ -7,12 +17,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   const historyView = document.getElementById("history-view");
   const shortcutsView = document.getElementById("shortcuts-view");
   const promptsView = document.getElementById("prompts-view");
+  const providerSelect = document.getElementById("providerSelect");
+  const geminiSection = document.getElementById("gemini-section");
+  const lmstudioSection = document.getElementById("lmstudio-section");
   const apiKeyInput = document.getElementById("apiKey");
   const modelSelect = document.getElementById("modelSelect");
   const fallbackModelSelect = document.getElementById("fallbackModelSelect");
+  const lmStudioUrlInput = document.getElementById("lmStudioUrl");
+  const lmStudioModelInput = document.getElementById("lmStudioModel");
+  const autoSelectAllCheckbox = document.getElementById("autoSelectAll");
   const saveBtn = document.getElementById("save-btn");
   const historyList = document.getElementById("history-list");
   const clearHistoryBtn = document.getElementById("clear-history-btn");
+
+  function applyProviderUI(provider) {
+    if (provider === "lmstudio") {
+      geminiSection.style.display = "none";
+      lmstudioSection.style.display = "block";
+    } else {
+      geminiSection.style.display = "block";
+      lmstudioSection.style.display = "none";
+    }
+  }
+
+  providerSelect.addEventListener("change", () => applyProviderUI(providerSelect.value));
 
   function populateModelSelects() {
     modelSelect.innerHTML = "";
@@ -42,10 +70,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Load API Key
   const {
+    aiProvider,
     geminiApiKey,
     geminiModel,
-    geminiFallbackModel
-  } = await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiFallbackModel"]);
+    geminiFallbackModel,
+    autoSelectAll,
+    lmStudioUrl,
+    lmStudioModel
+  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "autoSelectAll", "lmStudioUrl", "lmStudioModel"]);
+
+  providerSelect.value = aiProvider || "gemini";
+  applyProviderUI(providerSelect.value);
 
   if (geminiApiKey) {
     apiKeyInput.value = geminiApiKey;
@@ -53,6 +88,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   modelSelect.value = geminiModel || DEFAULT_GEMINI_MODEL;
   fallbackModelSelect.value = geminiFallbackModel || "";
+  autoSelectAllCheckbox.checked = !!autoSelectAll;
+  lmStudioUrlInput.value = lmStudioUrl || DEFAULT_LM_STUDIO_URL;
+  lmStudioModelInput.value = lmStudioModel || "";
 
   function switchView(activeView, activeBtn) {
     [settingsView, historyView, shortcutsView, promptsView].forEach(v => v.classList.remove("active"));
@@ -125,20 +163,29 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Save API Key
   saveBtn.addEventListener("click", async () => {
+    const provider = providerSelect.value;
     const key = apiKeyInput.value.trim();
     const selectedModel = modelSelect.value || DEFAULT_GEMINI_MODEL;
     const selectedFallbackModel = fallbackModelSelect.value;
+    const autoSelectAll = autoSelectAllCheckbox.checked;
+    const lmUrl = lmStudioUrlInput.value.trim() || DEFAULT_LM_STUDIO_URL;
+    const lmModel = lmStudioModelInput.value.trim();
 
-    if (key) {
-      await chrome.storage.local.set({
-        geminiApiKey: key,
-        geminiModel: selectedModel,
-        geminiFallbackModel: selectedFallbackModel
-      });
-      alert("Settings saved!");
-    } else {
-      alert("Please enter a valid API Key.");
+    if (provider === "gemini" && !key) {
+      showPopupToast("Please enter a valid Gemini API Key.", "error");
+      return;
     }
+
+    await chrome.storage.local.set({
+      aiProvider: provider,
+      geminiApiKey: key,
+      geminiModel: selectedModel,
+      geminiFallbackModel: selectedFallbackModel,
+      autoSelectAll: autoSelectAll,
+      lmStudioUrl: lmUrl,
+      lmStudioModel: lmModel
+    });
+    showPopupToast("Settings saved!", "success");
   });
 
   // Clear History
@@ -182,7 +229,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       const timestamp = document.createElement("span");
       timestamp.className = "history-timestamp";
       const actionLabel = ACTION_LABELS[item.action] || "Fix spelling & grammar";
-      timestamp.textContent = new Date(item.timestamp).toLocaleString() + " • " + actionLabel;
+      let meta = new Date(item.timestamp).toLocaleString() + " • " + actionLabel;
+      if (item.responseTimeMs != null) {
+        meta += " • " + (item.responseTimeMs / 1000).toFixed(2) + "s";
+      }
+      if (item.tokens?.total != null) {
+        meta += " • " + item.tokens.total + " tokens";
+        if (item.tokens.input != null && item.tokens.output != null) {
+          meta += " (" + item.tokens.input + " in / " + item.tokens.output + " out)";
+        }
+      }
+      timestamp.textContent = meta;
 
       const actions = document.createElement("div");
       actions.className = "history-actions";

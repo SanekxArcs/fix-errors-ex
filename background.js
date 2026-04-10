@@ -1,6 +1,14 @@
 importScripts('constants.js');
 
+// Ensure context menus are created when the local storage changes (e.g., when the extension is updated or settings are reset)
 chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    createContextMenus();
+  });
+});
+
+// Also create them on startup in case they were lost
+chrome.runtime.onStartup.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     createContextMenus();
   });
@@ -96,6 +104,8 @@ chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
+  const { autoSelectAll = false } = await chrome.storage.local.get("autoSelectAll");
+
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
   } catch (e) {
@@ -104,7 +114,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection" });
+    const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll });
     if (response && response.text && response.text.trim()) {
       await processTextWithAI(response.text, tab, "fixGrammar");
     }
@@ -121,16 +131,20 @@ async function processTextWithAI(originalText, tab, action) {
   }
 
   const {
+    aiProvider = "gemini",
     geminiApiKey,
     geminiModel,
-    geminiFallbackModel
-  } = await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiFallbackModel"]);
+    geminiFallbackModel,
+    lmStudioUrl,
+    lmStudioModel
+  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "lmStudioUrl", "lmStudioModel"]);
 
-  if (!geminiApiKey) {
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => alert("Please set your Gemini API Key in the extension popup.")
-    });
+  if (aiProvider !== "lmstudio" && !geminiApiKey) {
+    chrome.tabs.sendMessage(tab.id, {
+      action: "showToast",
+      message: "Please set your Gemini API Key in the extension popup.",
+      type: "error"
+    }).catch(() => {});
     return;
   }
 
@@ -143,20 +157,35 @@ async function processTextWithAI(originalText, tab, action) {
   try {
     safeSendMessage(tab.id, { action: "showToast", message: "AI is working...", type: "working" });
 
-    const fixedText = await callGeminiAI(
-      originalText,
-      geminiApiKey,
-      action,
-      geminiModel || DEFAULT_GEMINI_MODEL,
-      geminiFallbackModel || ""
-    );
+    const t0 = Date.now();
+    let result;
+    if (aiProvider === "lmstudio") {
+      result = await callLMStudioAI(
+        originalText,
+        lmStudioUrl || DEFAULT_LM_STUDIO_URL,
+        lmStudioModel || "",
+        action
+      );
+    } else {
+      result = await callGeminiAI(
+        originalText,
+        geminiApiKey,
+        action,
+        geminiModel || DEFAULT_GEMINI_MODEL,
+        geminiFallbackModel || ""
+      );
+    }
+    const responseTimeMs = Date.now() - t0;
+    const { text: fixedText, tokens } = result;
 
     const { history = [] } = await chrome.storage.local.get("history");
     const newEntry = {
       timestamp: new Date().toISOString(),
       original: originalText,
       fixed: fixedText,
-      action
+      action,
+      tokens,
+      responseTimeMs
     };
     const updatedHistory = [newEntry, ...history].slice(0, 50);
     await chrome.storage.local.set({ history: updatedHistory });
@@ -199,9 +228,15 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
       }
 
       const data = await response.json();
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!result) throw new Error("No response from AI");
-      return result.trim();
+      const aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!aiResponseText) throw new Error("No response from AI");
+      const usage = data.usageMetadata || {};
+      const tokens = {
+        input: usage.promptTokenCount ?? null,
+        output: usage.candidatesTokenCount ?? null,
+        total: usage.totalTokenCount ?? null
+      };
+      return { text: aiResponseText.trim(), tokens };
     } catch (error) {
       lastError = error;
       console.warn(`Gemini model failed: ${model}`, error);
@@ -213,4 +248,40 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   }
 
   throw lastError || new Error("Gemini request failed");
+}
+
+async function callLMStudioAI(text, baseUrl, model, action) {
+  const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
+  const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
+  const prompt = `${template}\n\nText: "${text}"`;
+
+  const url = `${baseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: model || "",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `LM Studio error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const aiResponseText = data.choices?.[0]?.message?.content;
+  if (!aiResponseText) throw new Error("No response from LM Studio");
+  const usage = data.usage || {};
+  const tokens = {
+    input: usage.prompt_tokens ?? null,
+    output: usage.completion_tokens ?? null,
+    total: usage.total_tokens ?? null
+  };
+  return { text: aiResponseText.trim(), tokens };
 }

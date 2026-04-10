@@ -41,13 +41,20 @@
         border-radius: 4px;
       }
 
-      select {
+      input[type="text"] {
         width: 100%;
         padding: 8px;
         box-sizing: border-box;
         border: 1px solid #ddd;
         border-radius: 4px;
-        background: #fff;
+      }
+
+      .provider-section {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 12px;
+        background: #fafafa;
       }
 
       .nav-buttons {
@@ -225,6 +232,29 @@
         display: flex;
         gap: 8px;
       }
+
+      #popup-toast {
+        position: fixed;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: #323232;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s, transform 0.2s;
+        z-index: 9999;
+      }
+      #popup-toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      #popup-toast.success { background: #2e7d32; }
+      #popup-toast.error   { background: #d32f2f; }
     </style>
   </head>
   <body>
@@ -238,22 +268,60 @@
     <hr />
 
     <div id="settings-view" class="view-container active">
-      <h2>Gemini Configuration</h2>
+      <h2>AI Configuration</h2>
       <div class="form-group">
-        <label for="apiKey">API Key (Gemini API)</label>
-        <input
-          type="password"
-          id="apiKey"
-          placeholder="Enter your Gemini API key"
-        />
+        <label for="providerSelect">AI Provider</label>
+        <select id="providerSelect">
+          <option value="gemini">Google Gemini (cloud)</option>
+          <option value="lmstudio">LM Studio (local)</option>
+        </select>
       </div>
-      <div class="form-group">
-        <label for="modelSelect">Primary model</label>
-        <select id="modelSelect"></select>
+
+      <div id="gemini-section" class="provider-section">
+        <div class="form-group">
+          <label for="apiKey">API Key (Gemini API)</label>
+          <input
+            type="password"
+            id="apiKey"
+            placeholder="Enter your Gemini API key"
+          />
+        </div>
+        <div class="form-group">
+          <label for="modelSelect">Primary model</label>
+          <select id="modelSelect"></select>
+        </div>
+        <div class="form-group">
+          <label for="fallbackModelSelect">Fallback model (used on error)</label>
+          <select id="fallbackModelSelect"></select>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="fallbackModelSelect">Fallback model (used on error)</label>
-        <select id="fallbackModelSelect"></select>
+
+      <div id="lmstudio-section" class="provider-section" style="display:none">
+        <div class="form-group">
+          <label for="lmStudioUrl">Server URL</label>
+          <input
+            type="text"
+            id="lmStudioUrl"
+            placeholder="http://localhost:1234"
+          />
+        </div>
+        <div class="form-group" style="margin-bottom: 0">
+          <label for="lmStudioModel">Model name <span style="font-weight:400;color:#888">(blank = use loaded model)</span></label>
+          <input
+            type="text"
+            id="lmStudioModel"
+            placeholder="e.g. mistral-7b-instruct"
+          />
+        </div>
+        <p style="font-size:0.78rem;color:#555;margin:10px 0 0">
+          Start LM Studio → open the <b>Local Server</b> tab → click <b>Start Server</b>.
+          Enable <b>CORS</b> in LM Studio settings so the extension can connect.
+        </p>
+      </div>
+
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="autoSelectAll" style="width: 16px; height: 16px; cursor: pointer;" />
+        <label for="autoSelectAll" style="margin-bottom: 0; cursor: pointer;">Auto select all text on shortcut</label>
       </div>
       <button id="save-btn" class="primary">Save Configuration</button>
       <p style="font-size: 0.8rem; color: #666; margin-top: 15px">
@@ -306,6 +374,7 @@
       </div>
     </div>
 
+    <div id="popup-toast"></div>
     <script src="constants.js"></script>
     <script src="popup.js"></script>
   </body>
