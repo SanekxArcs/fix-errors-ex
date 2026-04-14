@@ -12,7 +12,8 @@ const DEFAULT_PROMPTS = {
   translateUkrainian:'Translate the following text to Ukrainian. Ensure correct grammar and natural-sounding Ukrainian. Only return the translated text without quotes or explanations.',
   translateEnglish:  'Translate the following text to American English. Ensure correct grammar and natural-sounding American English. Only return the translated text without quotes or explanations.',
   formatMarkdown:    'Format the following text using proper Markdown syntax (headings, lists, bold, italic, code blocks, etc. where relevant). Fix any grammar issues. Only return the formatted Markdown text without explanations.',
-  formatSlack:       'Format the following text as a well-structured Slack message using Slack formatting (*bold*, _italic_, `code`, and bullet points). Fix any grammar issues. Keep it concise and clear. Only return the formatted message without explanations.'
+  formatSlack:       'Format the following text as a well-structured Slack message using Slack formatting (*bold*, _italic_, `code`, and bullet points). Fix any grammar issues. Keep it concise and clear. Only return the formatted message without explanations.',
+  aiPrompt:          null
 };
 
 const ACTION_LABELS = {
@@ -29,7 +30,8 @@ const ACTION_LABELS = {
   translateUkrainian:"Translate → Ukrainian",
   translateEnglish:  "Translate → English (US)",
   formatMarkdown:    "Format → Markdown",
-  formatSlack:       "Format → Slack message"
+  formatSlack:       "Format → Slack message",
+  aiPrompt:          "AI Prompt (custom)"
 };
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";

@@ -99,12 +99,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 // Keyboard shortcut handler
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "fix_grammar") return;
+  if (command !== "fix_grammar" && command !== "fix_selected" && command !== "ai_prompt") return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
-
-  const { autoSelectAll = false } = await chrome.storage.local.get("autoSelectAll");
 
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
@@ -113,13 +111,36 @@ chrome.commands.onCommand.addListener(async (command) => {
     return;
   }
 
-  try {
-    const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll });
-    if (response && response.text && response.text.trim()) {
-      await processTextWithAI(response.text, tab, "fixGrammar");
+  if (command === "fix_grammar") {
+    const { autoSelectAll = false } = await chrome.storage.local.get("autoSelectAll");
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll });
+      if (response && response.text && response.text.trim()) {
+        await processTextWithAI(response.text, tab, "fixGrammar");
+      }
+    } catch (e) {
+      console.warn("Could not get selection:", e);
     }
-  } catch (e) {
-    console.warn("Could not get selection:", e);
+  } else if (command === "fix_selected") {
+    // Always use only the manually selected text, ignoring autoSelectAll setting
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
+      if (response && response.text && response.text.trim()) {
+        await processTextWithAI(response.text, tab, "fixGrammar");
+      }
+    } catch (e) {
+      console.warn("Could not get selection:", e);
+    }
+  } else if (command === "ai_prompt") {
+    // Selected text is used as the raw AI prompt
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
+      if (response && response.text && response.text.trim()) {
+        await processTextWithAI(response.text, tab, "aiPrompt");
+      }
+    } catch (e) {
+      console.warn("Could not get selection:", e);
+    }
   }
 });
 
@@ -136,8 +157,9 @@ async function processTextWithAI(originalText, tab, action) {
     geminiModel,
     geminiFallbackModel,
     lmStudioUrl,
-    lmStudioModel
-  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "lmStudioUrl", "lmStudioModel"]);
+    lmStudioModel,
+    includeContext = false
+  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "lmStudioUrl", "lmStudioModel", "includeContext"]);
 
   if (aiProvider !== "lmstudio" && !geminiApiKey) {
     chrome.tabs.sendMessage(tab.id, {
@@ -159,12 +181,16 @@ async function processTextWithAI(originalText, tab, action) {
 
     const t0 = Date.now();
     let result;
+    const { history = [] } = await chrome.storage.local.get("history");
+    const historyContext = includeContext ? history : [];
+
     if (aiProvider === "lmstudio") {
       result = await callLMStudioAI(
         originalText,
         lmStudioUrl || DEFAULT_LM_STUDIO_URL,
         lmStudioModel || "",
-        action
+        action,
+        historyContext
       );
     } else {
       result = await callGeminiAI(
@@ -172,22 +198,26 @@ async function processTextWithAI(originalText, tab, action) {
         geminiApiKey,
         action,
         geminiModel || DEFAULT_GEMINI_MODEL,
-        geminiFallbackModel || ""
+        geminiFallbackModel || "",
+        historyContext
       );
     }
     const responseTimeMs = Date.now() - t0;
     const { text: fixedText, tokens } = result;
 
-    const { history = [] } = await chrome.storage.local.get("history");
-    const newEntry = {
+    if (!fixedText) {
+      safeSendMessage(tab.id, { action: "showToast", message: "AI returned no usable text. Original text kept.", type: "error" });
+      return;
+    }
+
+    const updatedHistory = [{
       timestamp: new Date().toISOString(),
       original: originalText,
       fixed: fixedText,
       action,
       tokens,
       responseTimeMs
-    };
-    const updatedHistory = [newEntry, ...history].slice(0, 50);
+    }, ...history].slice(0, 50);
     await chrome.storage.local.set({ history: updatedHistory });
 
     safeSendMessage(tab.id, { action: "replaceText", originalText, fixedText });
@@ -198,10 +228,32 @@ async function processTextWithAI(originalText, tab, action) {
   }
 }
 
-async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "") {
+function stripSurroundingQuotes(str) {
+  if (str.length > 1 &&
+      ((str.startsWith('"') && str.endsWith('"')) ||
+       (str.startsWith("'") && str.endsWith("'")))) {
+    return str.slice(1, -1);
+  }
+  return str;
+}
+
+async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = []) {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
-  const prompt = `${template}\n\nText: "${text}"`;
+  
+  let prompt = "";
+  if (action === "aiPrompt") {
+    prompt = text;
+  } else {
+    // Add history as context if provided
+    if (history && history.length > 0) {
+      const historyText = history.slice(0, 5).reverse().map(h => `Original: ${h.original}\nFixed: ${h.fixed}`).join("\n---\n");
+      prompt = `Here is some context from previous requests:\n${historyText}\n\n---\n\n${template}\n\nText: "${text}"`;
+    } else {
+      prompt = `${template}\n\nText: "${text}"`;
+    }
+  }
+
   const modelsToTry = [primaryModel];
   if (fallbackModel && fallbackModel !== primaryModel) {
     modelsToTry.push(fallbackModel);
@@ -236,7 +288,7 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
         output: usage.candidatesTokenCount ?? null,
         total: usage.totalTokenCount ?? null
       };
-      return { text: aiResponseText.trim(), tokens };
+      return { text: stripSurroundingQuotes(aiResponseText.trim()), tokens };
     } catch (error) {
       lastError = error;
       console.warn(`Gemini model failed: ${model}`, error);
@@ -250,10 +302,21 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   throw lastError || new Error("Gemini request failed");
 }
 
-async function callLMStudioAI(text, baseUrl, model, action) {
+async function callLMStudioAI(text, baseUrl, model, action, history = []) {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
-  const prompt = `${template}\n\nText: "${text}"`;
+  
+  let prompt = "";
+  if (action === "aiPrompt") {
+    prompt = text;
+  } else {
+    if (history && history.length > 0) {
+      const historyText = history.slice(0, 5).reverse().map(h => `Original: ${h.original}\nFixed: ${h.fixed}`).join("\n---\n");
+      prompt = `Here is some context from previous requests:\n${historyText}\n\n---\n\n${template}\n\nText: "${text}"`;
+    } else {
+      prompt = `${template}\n\nText: "${text}"`;
+    }
+  }
 
   const url = `${baseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
 
@@ -283,5 +346,5 @@ async function callLMStudioAI(text, baseUrl, model, action) {
     output: usage.completion_tokens ?? null,
     total: usage.total_tokens ?? null
   };
-  return { text: aiResponseText.trim(), tokens };
+  return { text: stripSurroundingQuotes(aiResponseText.trim()), tokens };
 }

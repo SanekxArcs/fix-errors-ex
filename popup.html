@@ -319,9 +319,13 @@
         </p>
       </div>
 
-      <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
         <input type="checkbox" id="autoSelectAll" style="width: 16px; height: 16px; cursor: pointer;" />
         <label for="autoSelectAll" style="margin-bottom: 0; cursor: pointer;">Auto select all text on shortcut</label>
+      </div>
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="includeContext" style="width: 16px; height: 16px; cursor: pointer;" />
+        <label for="includeContext" style="margin-bottom: 0; cursor: pointer;">Include history as context (experimental)</label>
       </div>
       <button id="save-btn" class="primary">Save Configuration</button>
       <p style="font-size: 0.8rem; color: #666; margin-top: 15px">
@@ -348,12 +352,20 @@
     <div id="shortcuts-view" class="view-container">
       <h2>Keyboard Shortcuts</h2>
       <div class="shortcut-row">
-        <span class="shortcut-label">Fix spelling &amp; grammar</span>
+        <span class="shortcut-label">Fix spelling &amp; grammar (respects auto-select setting)</span>
         <span class="shortcut-badge" id="shortcut-fix-grammar">Loading…</span>
       </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Fix spelling &amp; grammar (selected only)</span>
+        <span class="shortcut-badge" id="shortcut-fix-selected">Loading…</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Use selected text as AI prompt</span>
+        <span class="shortcut-badge" id="shortcut-ai-prompt">Loading…</span>
+      </div>
       <div class="info-box">
-        The default shortcut is <code>Alt+Shift+F</code>.<br /><br />
-        To change it, go to <code>chrome://extensions/shortcuts</code> in your
+        Default shortcuts: <code>Alt+Shift+F</code> (fix grammar), <code>Alt+Shift+G</code> (fix selected), <code>Alt+Shift+A</code> (AI prompt).<br /><br />
+        To change them, go to <code>chrome://extensions/shortcuts</code> in your
         browser, find <strong>Fix Errors AI</strong>, and click the pencil icon
         next to the shortcut.
       </div>

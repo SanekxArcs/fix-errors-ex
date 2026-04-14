@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const lmStudioUrlInput = document.getElementById("lmStudioUrl");
   const lmStudioModelInput = document.getElementById("lmStudioModel");
   const autoSelectAllCheckbox = document.getElementById("autoSelectAll");
+  const includeContextCheckbox = document.getElementById("includeContext");
   const saveBtn = document.getElementById("save-btn");
   const historyList = document.getElementById("history-list");
   const clearHistoryBtn = document.getElementById("clear-history-btn");
@@ -75,9 +76,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     geminiModel,
     geminiFallbackModel,
     autoSelectAll,
+    includeContext,
     lmStudioUrl,
     lmStudioModel
-  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "autoSelectAll", "lmStudioUrl", "lmStudioModel"]);
+  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "autoSelectAll", "includeContext", "lmStudioUrl", "lmStudioModel"]);
 
   providerSelect.value = aiProvider || "gemini";
   applyProviderUI(providerSelect.value);
@@ -89,6 +91,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   modelSelect.value = geminiModel || DEFAULT_GEMINI_MODEL;
   fallbackModelSelect.value = geminiFallbackModel || "";
   autoSelectAllCheckbox.checked = !!autoSelectAll;
+  includeContextCheckbox.checked = !!includeContext;
   lmStudioUrlInput.value = lmStudioUrl || DEFAULT_LM_STUDIO_URL;
   lmStudioModelInput.value = lmStudioModel || "";
 
@@ -168,6 +171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const selectedModel = modelSelect.value || DEFAULT_GEMINI_MODEL;
     const selectedFallbackModel = fallbackModelSelect.value;
     const autoSelectAll = autoSelectAllCheckbox.checked;
+    const includeContext = includeContextCheckbox.checked;
     const lmUrl = lmStudioUrlInput.value.trim() || DEFAULT_LM_STUDIO_URL;
     const lmModel = lmStudioModelInput.value.trim();
 
@@ -182,6 +186,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       geminiModel: selectedModel,
       geminiFallbackModel: selectedFallbackModel,
       autoSelectAll: autoSelectAll,
+      includeContext: includeContext,
       lmStudioUrl: lmUrl,
       lmStudioModel: lmModel
     });
@@ -200,8 +205,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function loadShortcuts() {
     const commands = await chrome.commands.getAll();
     const fixCmd = commands.find(c => c.name === "fix_grammar");
-    const el = document.getElementById("shortcut-fix-grammar");
-    el.textContent = fixCmd && fixCmd.shortcut ? fixCmd.shortcut : "Not set";
+    const fixSelCmd = commands.find(c => c.name === "fix_selected");
+    const aiPromptCmd = commands.find(c => c.name === "ai_prompt");
+    document.getElementById("shortcut-fix-grammar").textContent = fixCmd?.shortcut || "Not set";
+    document.getElementById("shortcut-fix-selected").textContent = fixSelCmd?.shortcut || "Not set";
+    document.getElementById("shortcut-ai-prompt").textContent = aiPromptCmd?.shortcut || "Not set";
   }
 
   // Function to render history
