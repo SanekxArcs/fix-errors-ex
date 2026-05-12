@@ -2,391 +2,425 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Fix Errors Settings</title>
+    <title>Fix Errors AI</title>
     <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: 1rem;
         width: 350px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        background: #161616;
+        color: #d4d4d4;
         margin: 0;
-        color: #333;
       }
 
-      h2 {
-        margin-top: 0;
-        color: #1a73e8;
+      /* ── Header ── */
+      .header {
+        display: flex;
+        align-items: center;
+        padding: 16px 16px 0;
+        gap: 10px;
+      }
+      .header img {
+        width: 24px;
+        height: 24px;
+      }
+      .header h2 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #fff;
+        margin: 0;
       }
 
+      /* ── Tab Bar ── */
+      .nav-buttons {
+        display: flex;
+        margin: 12px 16px 0;
+        border-bottom: 1px solid #252525;
+        gap: 0;
+      }
+      .nav-buttons button {
+        flex: 1;
+        padding: 8px 0;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #555;
+        cursor: pointer;
+        margin-bottom: -1px;
+        transition: color 0.15s, border-color 0.15s;
+        text-transform: uppercase;
+      }
+      .nav-buttons button:hover {
+        color: #aaa;
+      }
+      .nav-buttons button.primary {
+        color: #fff;
+        border-bottom-color: #3b82f6;
+        background: none;
+      }
+
+      /* ── View Containers ── */
       .view-container {
         display: none;
+        padding: 16px;
+        max-height: 480px;
+        overflow-y: auto;
       }
-      .active {
+      .view-container.active {
         display: block;
+      }
+
+      /* ── Typography & Elements ── */
+      h3 {
+        font-size: 12px;
+        font-weight: 600;
+        color: #bbb;
+        margin-bottom: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
 
       .form-group {
-        margin-bottom: 1rem;
+        margin-bottom: 14px;
       }
       label {
         display: block;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        color: #888;
         font-weight: 500;
       }
-      input[type="password"] {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
 
-      input[type="text"] {
+      input[type="text"],
+      input[type="password"],
+      select,
+      textarea {
         width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        border: 1px solid #ddd;
+        padding: 8px 10px;
+        background: #1e1e1e;
+        border: 1px solid #2a2a2a;
         border-radius: 4px;
+        color: #ccc;
+        font-size: 12px;
+        outline: none;
+        transition: border-color 0.15s, color 0.15s;
+      }
+      input:focus, select:focus, textarea:focus {
+        border-color: #3b82f6;
+        color: #fff;
       }
 
       .provider-section {
-        border: 1px solid #e0e0e0;
+        background: #1c1c1c;
+        border: 1px solid #252525;
         border-radius: 6px;
         padding: 12px;
-        margin-bottom: 12px;
-        background: #fafafa;
+        margin-bottom: 16px;
       }
 
-      .nav-buttons {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      button {
+      /* ── Buttons ── */
+      .action-btn {
+        width: 100%;
         padding: 8px 12px;
-        cursor: pointer;
-        border: 1px solid #1a73e8;
-        background: white;
-        color: #1a73e8;
+        background: #2a2a2a;
+        border: 1px solid #333;
         border-radius: 4px;
+        color: #ccc;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .action-btn:hover {
+        background: #333;
+        border-color: #444;
+        color: #fff;
+      }
+      .action-btn#save-btn {
+        background: #1d4ed8;
+        border-color: #3b82f6;
+        color: #fff;
+      }
+      .action-btn#save-btn:hover {
+        background: #2563eb;
+      }
+      .action-btn#clear-history-btn {
+        color: #fca5a5;
+      }
+      .action-btn#clear-history-btn:hover {
+        background: #7f1d1d;
+        border-color: #991b1b;
+      }
+      .action-btn#save-prompts-btn {
+        background: #1d4ed8;
+        border-color: #3b82f6;
+        color: #fff;
       }
 
-      button.primary {
-        background: #1a73e8;
-        color: white;
-      }
-      button:hover {
-        opacity: 0.9;
+      .flex-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
       }
 
+      /* ── History List ── */
+      #history-list {
+        background: #1c1c1c;
+        border-radius: 6px;
+        border: 1px solid #252525;
+      }
       .history-item {
-        padding: 10px;
-        border-bottom: 1px solid #eee;
-        font-size: 0.9rem;
+        padding: 12px;
+        border-bottom: 1px solid #252525;
       }
-
+      .history-item:last-child {
+        border-bottom: none;
+      }
       .history-original {
-        color: #888;
+        color: #666;
+        font-size: 11px;
         text-decoration: line-through;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
+        white-space: pre-wrap;
       }
       .history-fixed {
-        color: #2e7d32;
-        font-weight: 500;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 1.4;
+        white-space: pre-wrap;
       }
       .history-timestamp {
-        font-size: 0.75rem;
-        color: #bbb;
+        font-size: 10px;
+        color: #555;
         display: block;
-        margin-top: 4px;
+        margin-top: 8px;
       }
 
       .history-actions {
-        margin-top: 8px;
+        margin-top: 10px;
         display: flex;
         gap: 8px;
       }
       .copy-btn {
-        padding: 4px 8px;
-        font-size: 0.75rem;
-        border: 1px solid #ddd;
-        background: #fff;
-        border-radius: 3px;
+        padding: 4px 10px;
+        font-size: 10px;
+        background: #2a2a2a;
+        border: 1px solid #333;
+        border-radius: 4px;
+        color: #aaa;
         cursor: pointer;
-        color: #555;
+        transition: all 0.1s;
       }
       .copy-btn:hover {
-        background: #f5f5f5;
-        border-color: #bbb;
+        background: #333;
+        color: #fff;
       }
       .copy-btn.success {
-        border-color: #2e7d32;
-        color: #2e7d32;
+        color: #4ade80;
+        border-color: #166534;
       }
 
-      #history-list {
-        max-height: 400px;
-        overflow-y: auto;
-        background: #fafafa;
-        border-radius: 4px;
-      }
-
-      .empty-state {
-        padding: 20px;
-        text-align: center;
-        color: #888;
-        font-style: italic;
-      }
-
-      .shortcut-badge {
-        display: inline-block;
-        background: #f1f3f4;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        padding: 3px 8px;
-        font-family: monospace;
-        font-size: 0.9rem;
-        color: #333;
-      }
-
+      /* ── Shortcuts ── */
       .shortcut-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 10px 0;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid #252525;
       }
-
       .shortcut-label {
-        font-size: 0.9rem;
-        color: #555;
+        font-size: 12px;
+        color: #aaa;
+      }
+      .shortcut-badge {
+        background: #2a2a2a;
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 3px 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        color: #fff;
       }
 
+      /* ── Info Box ── */
       .info-box {
-        background: #e8f0fe;
-        border-left: 3px solid #1a73e8;
+        background: #1e3a8a33;
+        border-left: 3px solid #3b82f6;
         border-radius: 4px;
         padding: 10px 12px;
-        font-size: 0.8rem;
-        color: #444;
-        margin-top: 14px;
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 16px;
         line-height: 1.5;
       }
-
       .info-box code {
-        background: #fff;
-        border: 1px solid #c5cae9;
-        border-radius: 3px;
+        background: #1e293b;
+        color: #e2e8f0;
         padding: 1px 4px;
-        font-size: 0.8rem;
-      }
-
-      .prompts-note {
-        font-size: 0.78rem;
-        color: #555;
-        margin: 0 0 10px;
-      }
-      .prompts-note code {
-        background: #f1f3f4;
-        border: 1px solid #dadce0;
         border-radius: 3px;
-        padding: 1px 4px;
-        font-size: 0.78rem;
+        font-family: monospace;
       }
 
-      #prompts-list {
-        max-height: 360px;
-        overflow-y: auto;
-        margin-bottom: 10px;
-      }
-
+      /* ── Prompts View ── */
       .prompt-item {
-        margin-bottom: 10px;
+        margin-bottom: 16px;
+        background: #1c1c1c;
+        border: 1px solid #252525;
+        border-radius: 6px;
+        padding: 12px;
       }
       .prompt-item label {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #555;
-        margin-bottom: 3px;
-        display: block;
-      }
-      .prompt-item textarea {
-        width: 100%;
-        box-sizing: border-box;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 6px 8px;
-        font-size: 0.72rem;
-        font-family: "SFMono-Regular", Consolas, monospace;
-        resize: vertical;
-        line-height: 1.4;
-        color: #333;
-      }
-      .prompt-item textarea:focus {
-        outline: none;
-        border-color: #1a73e8;
+        color: #fff;
+        margin-bottom: 8px;
+        font-size: 12px;
       }
 
-      .prompts-actions {
-        display: flex;
-        gap: 8px;
-      }
-
+      /* ── Toast ── */
       #popup-toast {
         position: fixed;
-        bottom: 12px;
+        bottom: 16px;
         left: 50%;
-        transform: translateX(-50%) translateY(20px);
-        background: #323232;
+        transform: translateX(-50%) translateY(100px);
+        background: #333;
         color: #fff;
         padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 0.82rem;
-        white-space: nowrap;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.2s, transform 0.2s;
-        z-index: 9999;
+        border-radius: 20px;
+        font-size: 12px;
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
       }
       #popup-toast.show {
-        opacity: 1;
         transform: translateX(-50%) translateY(0);
       }
-      #popup-toast.success { background: #2e7d32; }
-      #popup-toast.error   { background: #d32f2f; }
+      #popup-toast.success { background: #166534; }
+      #popup-toast.error { background: #991b1b; }
+
+      .empty-state {
+        padding: 30px 20px;
+        text-align: center;
+        color: #555;
+        font-style: italic;
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #161616; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #444; }
     </style>
   </head>
   <body>
+    <div class="header">
+      <img src="icons/Logo-Luigis-Box-16.png" alt="Logo">
+      <h2>Fix Errors AI</h2>
+    </div>
+
     <div class="nav-buttons">
       <button id="view-settings-btn" class="primary">Settings</button>
       <button id="view-history-btn">History</button>
-      <button id="view-shortcuts-btn">Shortcuts</button>
       <button id="view-prompts-btn">Prompts</button>
+      <button id="view-shortcuts-btn">Shortcuts</button>
     </div>
 
-    <hr />
-
+    <!-- Settings View -->
     <div id="settings-view" class="view-container active">
-      <h2>AI Configuration</h2>
+      <h3>AI Provider</h3>
       <div class="form-group">
-        <label for="providerSelect">AI Provider</label>
         <select id="providerSelect">
-          <option value="gemini">Google Gemini (cloud)</option>
-          <option value="lmstudio">LM Studio (local)</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="lmstudio">LM Studio (Local)</option>
         </select>
       </div>
 
       <div id="gemini-section" class="provider-section">
         <div class="form-group">
-          <label for="apiKey">API Key (Gemini API)</label>
-          <input
-            type="password"
-            id="apiKey"
-            placeholder="Enter your Gemini API key"
-          />
+          <label for="apiKey">Gemini API Key</label>
+          <input type="password" id="apiKey" placeholder="Paste your API key here" />
         </div>
         <div class="form-group">
-          <label for="modelSelect">Primary model</label>
+          <label for="modelSelect">Primary Model</label>
           <select id="modelSelect"></select>
         </div>
-        <div class="form-group">
-          <label for="fallbackModelSelect">Fallback model (used on error)</label>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="fallbackModelSelect">Fallback Model (Optional)</label>
           <select id="fallbackModelSelect"></select>
         </div>
       </div>
 
-      <div id="lmstudio-section" class="provider-section" style="display:none">
+      <div id="lmstudio-section" class="provider-section" style="display: none;">
         <div class="form-group">
           <label for="lmStudioUrl">Server URL</label>
-          <input
-            type="text"
-            id="lmStudioUrl"
-            placeholder="http://localhost:1234"
-          />
+          <input type="text" id="lmStudioUrl" placeholder="http://localhost:1234" />
         </div>
-        <div class="form-group" style="margin-bottom: 0">
-          <label for="lmStudioModel">Model name <span style="font-weight:400;color:#888">(blank = use loaded model)</span></label>
-          <input
-            type="text"
-            id="lmStudioModel"
-            placeholder="e.g. mistral-7b-instruct"
-          />
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="lmStudioModel">Model Identifier</label>
+          <input type="text" id="lmStudioModel" placeholder="e.g. qwen2.5-7b-instruct" />
         </div>
-        <p style="font-size:0.78rem;color:#555;margin:10px 0 0">
-          Start LM Studio → open the <b>Local Server</b> tab → click <b>Start Server</b>.
-          Enable <b>CORS</b> in LM Studio settings so the extension can connect.
-        </p>
       </div>
 
+      <h3>General</h3>
       <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <input type="checkbox" id="autoSelectAll" style="width: 16px; height: 16px; cursor: pointer;" />
-        <label for="autoSelectAll" style="margin-bottom: 0; cursor: pointer;">Auto select all text on shortcut</label>
+        <input type="checkbox" id="autoSelectAll" style="width: 14px; height: 14px; cursor: pointer;">
+        <label for="autoSelectAll" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Auto-select word on right-click</label>
       </div>
-      <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
-        <input type="checkbox" id="includeContext" style="width: 16px; height: 16px; cursor: pointer;" />
-        <label for="includeContext" style="margin-bottom: 0; cursor: pointer;">Include history as context (experimental)</label>
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+        <input type="checkbox" id="includeContext" style="width: 14px; height: 14px; cursor: pointer;">
+        <label for="includeContext" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Include context (experimental)</label>
       </div>
-      <button id="save-btn" class="primary">Save Configuration</button>
-      <p style="font-size: 0.8rem; color: #666; margin-top: 15px">
-        <b>Rules:</b> Select text on any page, right click, and choose "Fix
-        typos and grammar".<br /><br />
-        <b>Translation:</b> Append <i>"en to pl"</i> or <i>"ua to en"</i> at the
-        end of selection to translate.
-      </p>
+
+      <button id="save-btn" class="action-btn">Save Settings</button>
     </div>
 
+    <!-- History View -->
     <div id="history-view" class="view-container">
-      <h2>Update History</h2>
-      <div id="history-list">
-        <!-- History will be injected here -->
-      </div>
-      <button
-        id="clear-history-btn"
-        style="margin-top: 10px; border-color: #d32f2f; color: #d32f2f"
-      >
-        Clear All
-      </button>
-    </div>
-
-    <div id="shortcuts-view" class="view-container">
-      <h2>Keyboard Shortcuts</h2>
-      <div class="shortcut-row">
-        <span class="shortcut-label">Fix spelling &amp; grammar (respects auto-select setting)</span>
-        <span class="shortcut-badge" id="shortcut-fix-grammar">Loading…</span>
-      </div>
-      <div class="shortcut-row">
-        <span class="shortcut-label">Fix spelling &amp; grammar (selected only)</span>
-        <span class="shortcut-badge" id="shortcut-fix-selected">Loading…</span>
-      </div>
-      <div class="shortcut-row">
-        <span class="shortcut-label">Use selected text as AI prompt</span>
-        <span class="shortcut-badge" id="shortcut-ai-prompt">Loading…</span>
-      </div>
-      <div class="info-box">
-        Default shortcuts: <code>Alt+Shift+F</code> (fix grammar), <code>Alt+Shift+G</code> (fix selected), <code>Alt+Shift+A</code> (AI prompt).<br /><br />
-        To change them, go to <code>chrome://extensions/shortcuts</code> in your
-        browser, find <strong>Fix Errors AI</strong>, and click the pencil icon
-        next to the shortcut.
+      <h3>Recent Edits</h3>
+      <div id="history-list"></div>
+      <div class="flex-row">
+        <button id="clear-history-btn" class="action-btn">Clear History</button>
       </div>
     </div>
 
+    <!-- Prompts View -->
     <div id="prompts-view" class="view-container">
-      <h2>Prompts</h2>
-      <p class="prompts-note">
-        Customize the AI instructions for each tool. The selected text is
-        automatically appended at the end.
-      </p>
-      <div id="prompts-list">
-        <!-- Populated dynamically by popup.js -->
+      <h3>System Prompts</h3>
+      <p style="font-size: 10px; color: #666; margin-bottom: 15px;">Customize how the AI behaves for each action.</p>
+      <div id="prompts-list"></div>
+      <div class="flex-row">
+        <button id="save-prompts-btn" class="action-btn primary-action">Save Prompts</button>
+        <button id="reset-prompts-btn" class="action-btn">Reset Defaults</button>
       </div>
-      <div class="prompts-actions">
-        <button id="save-prompts-btn" class="primary">Save Prompts</button>
-        <button id="reset-prompts-btn">Reset to Defaults</button>
+    </div>
+
+    <!-- Shortcuts View -->
+    <div id="shortcuts-view" class="view-container">
+      <h3>Keyboard Shortcuts</h3>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Fix spelling & grammar</span>
+        <span id="shortcut-fix-grammar" class="shortcut-badge">Alt+Shift+F</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Fix selected text</span>
+        <span id="shortcut-fix-selected" class="shortcut-badge">Alt+Shift+S</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Custom AI Prompt</span>
+        <span id="shortcut-ai-prompt" class="shortcut-badge">Alt+Shift+P</span>
+      </div>
+
+      <div class="info-box">
+        Configure these in <code>chrome://extensions/shortcuts</code>
       </div>
     </div>
 
     <div id="popup-toast"></div>
+
     <script src="constants.js"></script>
     <script src="popup.js"></script>
   </body>
