@@ -91,6 +91,17 @@ function createContextMenus() {
 
 const ACTION_IDS = new Set(Object.keys(DEFAULT_PROMPTS));
 
+let currentAbortController = null;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "cancelAI") {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+  }
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const action = info.menuItemId;
   if (!ACTION_IDS.has(action) || !info.selectionText) return;
@@ -179,6 +190,9 @@ async function processTextWithAI(originalText, tab, action) {
   try {
     safeSendMessage(tab.id, { action: "showToast", message: "AI is working...", type: "working" });
 
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+
     const t0 = Date.now();
     let result;
     const { history = [] } = await chrome.storage.local.get("history");
@@ -190,7 +204,8 @@ async function processTextWithAI(originalText, tab, action) {
         lmStudioUrl || DEFAULT_LM_STUDIO_URL,
         lmStudioModel || "",
         action,
-        historyContext
+        historyContext,
+        signal
       );
     } else {
       result = await callGeminiAI(
@@ -199,9 +214,11 @@ async function processTextWithAI(originalText, tab, action) {
         action,
         geminiModel || DEFAULT_GEMINI_MODEL,
         geminiFallbackModel || "",
-        historyContext
+        historyContext,
+        signal
       );
     }
+    currentAbortController = null;
     const responseTimeMs = Date.now() - t0;
     const { text: fixedText, tokens } = result;
 
@@ -223,6 +240,11 @@ async function processTextWithAI(originalText, tab, action) {
     safeSendMessage(tab.id, { action: "replaceText", originalText, fixedText });
     safeSendMessage(tab.id, { action: "showToast", message: "Done!", type: "success" });
   } catch (error) {
+    currentAbortController = null;
+    if (error.name === "AbortError") {
+      safeSendMessage(tab.id, { action: "showToast", message: "AI process cancelled.", type: "info" });
+      return;
+    }
     console.error("Gemini AI Error:", error);
     safeSendMessage(tab.id, { action: "showToast", message: "Error: " + error.message, type: "error" });
   }
@@ -237,7 +259,7 @@ function stripSurroundingQuotes(str) {
   return str;
 }
 
-async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = []) {
+async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = [], signal = null) {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
   
@@ -262,6 +284,7 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   let lastError;
 
   for (const model of modelsToTry) {
+    if (signal?.aborted) throw new Error("AbortError");
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     try {
@@ -271,7 +294,7 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }]
         }),
-        signal: AbortSignal.timeout(30000)
+        signal: signal || AbortSignal.timeout(30000)
       });
 
       if (!response.ok) {
@@ -302,7 +325,7 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   throw lastError || new Error("Gemini request failed");
 }
 
-async function callLMStudioAI(text, baseUrl, model, action, history = []) {
+async function callLMStudioAI(text, baseUrl, model, action, history = [], signal = null) {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
   
@@ -329,7 +352,7 @@ async function callLMStudioAI(text, baseUrl, model, action, history = []) {
       temperature: 0.3,
       stream: false
     }),
-    signal: AbortSignal.timeout(30000)
+    signal: signal || AbortSignal.timeout(30000)
   });
 
   if (!response.ok) {

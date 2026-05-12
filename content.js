@@ -50,7 +50,7 @@ if (!window.lbxFixErrorsInjected) {
         display: flex;
         align-items: center;
         gap: 10px;
-        pointer-events: none;
+        pointer-events: auto;
       `;
       document.body.appendChild(toast);
     }
@@ -63,7 +63,44 @@ if (!window.lbxFixErrorsInjected) {
     };
 
     toast.style.backgroundColor = colors[type] || colors.info;
-    toast.innerText = message;
+    
+    // Clear previous content
+    toast.innerHTML = '';
+    
+    const textSpan = document.createElement("span");
+    textSpan.innerText = message;
+    toast.appendChild(textSpan);
+
+    if (type === "working") {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      `;
+      cancelBtn.style.cssText = `
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        margin-left: 4px;
+        transition: background 0.2s;
+      `;
+      cancelBtn.onmouseover = () => cancelBtn.style.backgroundColor = "rgba(255, 255, 255, 0.3)";
+      cancelBtn.onmouseout = () => cancelBtn.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
+      cancelBtn.onclick = () => {
+        chrome.runtime.sendMessage({ action: "cancelAI" });
+        showToast("Cancelling...", "info");
+      };
+      toast.appendChild(cancelBtn);
+    }
+
     toast.style.opacity = "1";
     toast.style.transform = "translateY(0)";
 
