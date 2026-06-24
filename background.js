@@ -85,12 +85,20 @@ function createContextMenus() {
 const ACTION_IDS = new Set(Object.keys(DEFAULT_PROMPTS));
 
 let currentAbortController = null;
+let pendingReplyAssistTab = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "cancelAI") {
     if (currentAbortController) {
       currentAbortController.abort();
       currentAbortController = null;
+    }
+  } else if (request.action === "replyAssistSubmit") {
+    const { selectedText, context } = request;
+    if (pendingReplyAssistTab) {
+      const tab = pendingReplyAssistTab;
+      pendingReplyAssistTab = null;
+      processTextWithAI(selectedText, tab, "replyAssist", context);
     }
   }
 });
@@ -136,11 +144,11 @@ chrome.commands.onCommand.addListener(async (command) => {
       console.warn("Could not get selection:", e);
     }
   } else if (command === "ai_prompt") {
-    // Selected text is used as the raw AI prompt
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
       if (response && response.text && response.text.trim()) {
-        await processTextWithAI(response.text, tab, "aiPrompt");
+        pendingReplyAssistTab = tab;
+        chrome.tabs.sendMessage(tab.id, { action: "showReplyAssistModal", selectedText: response.text }).catch(() => {});
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
@@ -148,7 +156,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-async function processTextWithAI(originalText, tab, action) {
+async function processTextWithAI(originalText, tab, action, context = "") {
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
   } catch (e) {
@@ -198,7 +206,8 @@ async function processTextWithAI(originalText, tab, action) {
         lmStudioModel || "",
         action,
         historyContext,
-        signal
+        signal,
+        context
       );
     } else {
       result = await callGeminiAI(
@@ -208,7 +217,8 @@ async function processTextWithAI(originalText, tab, action) {
         geminiModel || DEFAULT_GEMINI_MODEL,
         geminiFallbackModel || "",
         historyContext,
-        signal
+        signal,
+        context
       );
     }
     currentAbortController = null;
@@ -252,13 +262,16 @@ function stripSurroundingQuotes(str) {
   return str;
 }
 
-async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = [], signal = null) {
+async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = [], signal = null, context = "") {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
-  
+
   let prompt = "";
   if (action === "aiPrompt") {
     prompt = text;
+  } else if (action === "replyAssist") {
+    const contextPart = context ? `\n\nContext (surrounding conversation):\n"${context}"` : "";
+    prompt = `${template}${contextPart}\n\nText to refine:\n"${text}"`;
   } else {
     // Add history as context if provided
     if (history && history.length > 0) {
@@ -318,13 +331,16 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   throw lastError || new Error("Gemini request failed");
 }
 
-async function callLMStudioAI(text, baseUrl, model, action, history = [], signal = null) {
+async function callLMStudioAI(text, baseUrl, model, action, history = [], signal = null, context = "") {
   const { customPrompts = {} } = await chrome.storage.local.get("customPrompts");
   const template = customPrompts[action] || DEFAULT_PROMPTS[action] || DEFAULT_PROMPTS.fixGrammar;
-  
+
   let prompt = "";
   if (action === "aiPrompt") {
     prompt = text;
+  } else if (action === "replyAssist") {
+    const contextPart = context ? `\n\nContext (surrounding conversation):\n"${context}"` : "";
+    prompt = `${template}${contextPart}\n\nText to refine:\n"${text}"`;
   } else {
     if (history && history.length > 0) {
       const historyText = history.slice(0, 5).reverse().map(h => `Original: ${h.original}\nFixed: ${h.fixed}`).join("\n---\n");
