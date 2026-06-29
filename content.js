@@ -16,6 +16,20 @@ if (!window.lbxFixErrorsInjected) {
     } else if (request.action === "showReplyAssistModal") {
       showReplyAssistPanel(request.selectedText);
       if (sendResponse) sendResponse({ status: "done" });
+    } else if (request.action === "showRetryableError") {
+      const { message, fallbackModel, models } = request;
+      if (fallbackModel) {
+        showToast(message, "error", {
+          retryLabel: "↺ Retry",
+          onRetry: () => chrome.runtime.sendMessage({ action: "retryAI", model: fallbackModel })
+        });
+      } else {
+        showToast(message, "error", {
+          retryLabel: "↺ Choose model",
+          onRetry: () => showModelPickerPanel(models)
+        });
+      }
+      if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "getSelection") {
       const activeElement = document.activeElement;
       if (request.autoSelectAll && activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable)) {
@@ -66,7 +80,7 @@ if (!window.lbxFixErrorsInjected) {
     }
   }
 
-  function showToast(message, type = "info") {
+  function showToast(message, type = "info", options = {}) {
     let toastId = "lbx-ai-toast";
     let toast = document.getElementById(toastId);
 
@@ -138,15 +152,113 @@ if (!window.lbxFixErrorsInjected) {
       toast.appendChild(cancelBtn);
     }
 
+    if (options.onRetry) {
+      const retryBtn = document.createElement("button");
+      retryBtn.textContent = options.retryLabel || "↺ Retry";
+      retryBtn.style.cssText = `
+        background: rgba(255, 255, 255, 0.18);
+        border: none;
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 10px;
+        margin-left: 8px;
+        white-space: nowrap;
+        font-family: inherit;
+      `;
+      retryBtn.onmouseover = () => { retryBtn.style.background = "rgba(255,255,255,0.28)"; };
+      retryBtn.onmouseout = () => { retryBtn.style.background = "rgba(255,255,255,0.18)"; };
+      retryBtn.onclick = options.onRetry;
+      toast.appendChild(retryBtn);
+    }
+
     toast.style.opacity = "1";
     toast.style.transform = "translateY(0)";
 
-    if (type !== "working") {
+    // Don't auto-hide if there's a retry button — user needs time to act
+    if (type !== "working" && !options.onRetry) {
       setTimeout(() => {
         toast.style.opacity = "0";
         toast.style.transform = "translateY(20px)";
       }, 4000);
     }
+  }
+
+  function showModelPickerPanel(models) {
+    const existing = document.getElementById("lbx-model-picker-panel");
+    if (existing) existing.remove();
+
+    const panel = document.createElement("div");
+    panel.id = "lbx-model-picker-panel";
+    panel.style.cssText = `
+      position: fixed;
+      bottom: 72px;
+      right: 20px;
+      width: 270px;
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #d4d4d4;
+      z-index: 1000002;
+      overflow: hidden;
+    `;
+
+    const header = document.createElement("div");
+    header.style.cssText = `
+      padding: 10px 14px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      border-bottom: 1px solid #2a2a2a;
+    `;
+    header.textContent = "Retry with model:";
+
+    const list = document.createElement("div");
+    list.style.cssText = "padding: 4px 0;";
+
+    models.forEach(m => {
+      const btn = document.createElement("button");
+      btn.textContent = m.label;
+      btn.style.cssText = `
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 14px;
+        background: none;
+        border: none;
+        color: #c8c8c8;
+        font-size: 12px;
+        cursor: pointer;
+        font-family: inherit;
+        line-height: 1.3;
+      `;
+      btn.onmouseover = () => { btn.style.background = "#2a2a2a"; btn.style.color = "#fff"; };
+      btn.onmouseout = () => { btn.style.background = "none"; btn.style.color = "#c8c8c8"; };
+      btn.onclick = () => {
+        panel.remove();
+        chrome.runtime.sendMessage({ action: "retryAI", model: m.id });
+      };
+      list.appendChild(btn);
+    });
+
+    panel.appendChild(header);
+    panel.appendChild(list);
+    document.body.appendChild(panel);
+
+    // Close when clicking outside
+    setTimeout(() => {
+      const closeOnOutside = (e) => {
+        if (!panel.contains(e.target)) {
+          panel.remove();
+          document.removeEventListener("click", closeOnOutside, true);
+        }
+      };
+      document.addEventListener("click", closeOnOutside, true);
+    }, 100);
   }
 
   // Non-blocking bottom-right panel — page stays interactive while open.

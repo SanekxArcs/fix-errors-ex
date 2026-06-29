@@ -79,6 +79,11 @@ function createContextMenus() {
 
     // 9. Format Slack message
     chrome.contextMenus.create({ id: "formatSlack", parentId: "aiTextTools", title: "Format Slack message", contexts: ["selection"] });
+
+    chrome.contextMenus.create({ id: "sep5", parentId: "aiTextTools", type: "separator", contexts: ["selection"] });
+
+    // 10. Fix keyboard layout
+    chrome.contextMenus.create({ id: "translit", parentId: "aiTextTools", title: "Fix keyboard layout (UA\u2194EN)", contexts: ["selection"] });
   });
 }
 
@@ -86,6 +91,15 @@ const ACTION_IDS = new Set(Object.keys(DEFAULT_PROMPTS));
 
 let currentAbortController = null;
 let pendingReplyAssistTab = null;
+let pendingRetry = null;
+
+function isCapacityError(msg) {
+  if (!msg) return false;
+  const m = msg.toLowerCase();
+  return m.includes("high demand") || m.includes("overloaded") || m.includes("overload") ||
+    m.includes("resource_exhausted") || m.includes("service unavailable") ||
+    m.includes("temporarily unavailable") || m.includes("capacity");
+}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "cancelAI") {
@@ -100,12 +114,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       pendingReplyAssistTab = null;
       processTextWithAI(selectedText, tab, "replyAssist", context);
     }
+  } else if (request.action === "retryAI") {
+    if (pendingRetry && sender.tab) {
+      const retry = pendingRetry;
+      pendingRetry = null;
+      processTextWithAI(retry.originalText, sender.tab, retry.action, retry.context, request.model);
+    }
   }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const action = info.menuItemId;
   if (!ACTION_IDS.has(action) || !info.selectionText) return;
+  if (action === "translit") {
+    await processTranslit(info.selectionText, tab);
+    return;
+  }
   await processTextWithAI(info.selectionText, tab, action);
 });
 
@@ -156,7 +180,70 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-async function processTextWithAI(originalText, tab, action, context = "") {
+// ─── Keyboard layout translit (UA ↔ EN) ──────────────────────────────────────
+
+const UA_TO_EN_MAP = {
+  'й':'q','ц':'w','у':'e','к':'r','е':'t','н':'y','г':'u','ш':'i','щ':'o','з':'p','х':'[','ї':']',
+  'ф':'a','і':'s','в':'d','а':'f','п':'g','р':'h','о':'j','л':'k','д':'l','ж':';','є':"'",
+  'я':'z','ч':'x','с':'c','м':'v','и':'b','т':'n','ь':'m','б':',','ю':'.',
+  'Й':'Q','Ц':'W','У':'E','К':'R','Є':'T','Н':'Y','Г':'U','Ш':'I','Щ':'O','З':'P','Х':'{','Ї':'}',
+  'Ф':'A','І':'S','В':'D','А':'F','П':'G','Р':'H','О':'J','Л':'K','Д':'L','Ж':':','Є':"\"",
+  'Я':'Z','Ч':'X','С':'C','М':'V','И':'B','Т':'N','Ь':'M','Б':'<','Ю':'>'
+};
+
+const EN_TO_UA_MAP = {
+  'q':'й','w':'ц','e':'у','r':'к','t':'е','y':'н','u':'г','i':'ш','o':'щ','p':'з',
+  'a':'ф','s':'і','d':'в','f':'а','g':'п','h':'р','j':'о','k':'л','l':'д',
+  'z':'я','x':'ч','c':'с','v':'м','b':'и','n':'т','m':'ь',
+  'Q':'Й','W':'Ц','E':'У','R':'К','T':'Є','Y':'Н','U':'Г','I':'Ш','O':'Щ','P':'З',
+  'A':'Ф','S':'І','D':'В','F':'А','G':'П','H':'Р','J':'О','K':'Л','L':'Д',
+  'Z':'Я','X':'Ч','C':'С','V':'М','B':'И','N':'Т','M':'Ь'
+};
+
+function translitKeyboard(text) {
+  const cyrillicCount = [...text].filter(ch => /[а-яА-ЯіІїЇєЄ]/.test(ch)).length;
+  const latinCount    = [...text].filter(ch => /[a-zA-Z]/.test(ch)).length;
+  if (cyrillicCount === 0 && latinCount === 0) return text;
+  const map = cyrillicCount >= latinCount ? UA_TO_EN_MAP : EN_TO_UA_MAP;
+  return [...text].map(ch => map[ch] ?? ch).join('');
+}
+
+async function processTranslit(originalText, tab) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+  } catch (e) {
+    console.warn("Script injection failed:", e);
+  }
+
+  const fixedText = translitKeyboard(originalText);
+
+  const safeSend = (msg) => chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+
+  if (fixedText === originalText) {
+    safeSend({ action: "showToast", message: "No layout change detected.", type: "error" });
+    return;
+  }
+
+  const { history = [] } = await chrome.storage.local.get("history");
+  const updatedHistory = [{
+    timestamp: new Date().toISOString(),
+    original: originalText,
+    fixed: fixedText,
+    action: "translit",
+    tokens: null,
+    responseTimeMs: 0
+  }, ...history].slice(0, 50);
+  await chrome.storage.local.set({ history: updatedHistory });
+
+  safeSend({ action: "replaceText", originalText, fixedText });
+  safeSend({ action: "showToast", message: "Layout fixed!", type: "success" });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// modelOverride: when set, skip the normal provider/model config and use this specific Gemini model.
+// Used by the "Retry with model" flow after a capacity error.
+async function processTextWithAI(originalText, tab, action, context = "", modelOverride = null) {
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
   } catch (e) {
@@ -199,7 +286,12 @@ async function processTextWithAI(originalText, tab, action, context = "") {
     const { history = [] } = await chrome.storage.local.get("history");
     const historyContext = includeContext ? history : [];
 
-    if (aiProvider === "lmstudio") {
+    if (modelOverride) {
+      // Retry with a specific model — no fallback, always Gemini
+      result = await callGeminiAI(
+        originalText, geminiApiKey, action, modelOverride, "", historyContext, signal, context
+      );
+    } else if (aiProvider === "lmstudio") {
       result = await callLMStudioAI(
         originalText,
         lmStudioUrl || DEFAULT_LM_STUDIO_URL,
@@ -248,8 +340,23 @@ async function processTextWithAI(originalText, tab, action, context = "") {
       safeSendMessage(tab.id, { action: "showToast", message: "AI process cancelled.", type: "info" });
       return;
     }
-    console.error("Gemini AI Error:", error);
-    safeSendMessage(tab.id, { action: "showToast", message: "Error: " + error.message, type: "error" });
+    console.error("AI Error:", error);
+
+    if (isCapacityError(error.message) && aiProvider !== "lmstudio") {
+      // Store context for the retry; content.js will show the retry UI
+      pendingRetry = { originalText, action, context };
+      const fallbackModel = (!modelOverride && geminiFallbackModel && geminiFallbackModel !== (geminiModel || DEFAULT_GEMINI_MODEL))
+        ? geminiFallbackModel
+        : null;
+      safeSendMessage(tab.id, {
+        action: "showRetryableError",
+        message: error.message,
+        fallbackModel,
+        models: GEMINI_MODELS
+      });
+    } else {
+      safeSendMessage(tab.id, { action: "showToast", message: "Error: " + error.message, type: "error" });
+    }
   }
 }
 

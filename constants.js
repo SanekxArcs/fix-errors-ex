@@ -13,6 +13,7 @@ const DEFAULT_PROMPTS = {
   translateEnglish:  'Translate the following text to American English. Ensure correct grammar and natural-sounding American English. Only return the translated text without quotes or explanations.',
   formatMarkdown:    'Format the following text using proper Markdown syntax (headings, lists, bold, italic, code blocks, etc. where relevant). Fix any grammar issues. Only return the formatted Markdown text without explanations.',
   formatSlack:       'Format the following text as a well-structured Slack message using Slack formatting (*bold*, _italic_, `code`, and bullet points). Fix any grammar issues. Keep it concise and clear. Only return the formatted message without explanations.',
+  translit:          null,
   replyAssist:       `You are a writing refinement assistant.
 Your only task is to take user-written text and refine it so it becomes clear, professional, and well-structured while:
 - Preserving the original intent, meaning, and personal voice
@@ -42,6 +43,7 @@ const ACTION_LABELS = {
   translateEnglish:  "Translate → English (US)",
   formatMarkdown:    "Format → Markdown",
   formatSlack:       "Format → Slack message",
+  translit:          "Fix keyboard layout (UA↔EN)",
   replyAssist:       "Reply Assist",
   aiPrompt:          "AI Prompt (custom)"
 };
