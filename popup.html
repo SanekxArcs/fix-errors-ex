@@ -309,6 +309,35 @@
         font-style: italic;
       }
 
+      /* ── History Stats ── */
+      #history-stats {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .stat-box {
+        flex: 1;
+        background: #1c1c1c;
+        border: 1px solid #252525;
+        border-radius: 6px;
+        padding: 8px 6px;
+        text-align: center;
+      }
+      .stat-value {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+      }
+      .stat-label {
+        display: block;
+        font-size: 9px;
+        color: #777;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 2px;
+      }
+
       /* Custom scrollbar */
       ::-webkit-scrollbar { width: 8px; }
       ::-webkit-scrollbar-track { background: #161616; }
@@ -381,6 +410,20 @@
     <!-- History View -->
     <div id="history-view" class="view-container">
       <h3>Recent Edits</h3>
+      <div id="history-stats">
+        <div class="stat-box">
+          <span id="stat-count" class="stat-value">0</span>
+          <span class="stat-label">Corrected</span>
+        </div>
+        <div class="stat-box">
+          <span id="stat-time" class="stat-value">0s</span>
+          <span class="stat-label">Total Time</span>
+        </div>
+        <div class="stat-box">
+          <span id="stat-tokens" class="stat-value">0</span>
+          <span class="stat-label">Tokens Used</span>
+        </div>
+      </div>
       <div id="history-list"></div>
       <div class="flex-row">
         <button id="clear-history-btn" class="action-btn">Clear History</button>

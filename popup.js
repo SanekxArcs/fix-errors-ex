@@ -212,10 +212,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("shortcut-ai-prompt").textContent = aiPromptCmd?.shortcut || "Not set";
   }
 
+  function formatDuration(totalMs) {
+    const totalSeconds = totalMs / 1000;
+    if (totalSeconds < 60) return totalSeconds.toFixed(1) + "s";
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.round(totalSeconds % 60);
+    return minutes + "m " + seconds + "s";
+  }
+
+  function updateHistoryStats(history) {
+    const statCount = document.getElementById("stat-count");
+    const statTime = document.getElementById("stat-time");
+    const statTokens = document.getElementById("stat-tokens");
+
+    const totalTimeMs = history.reduce((sum, item) => sum + (item.responseTimeMs || 0), 0);
+    const totalTokens = history.reduce((sum, item) => sum + (item.tokens?.total || 0), 0);
+
+    statCount.textContent = history.length;
+    statTime.textContent = formatDuration(totalTimeMs);
+    statTokens.textContent = totalTokens.toLocaleString();
+  }
+
   // Function to render history
   async function renderHistory() {
     const { history = [] } = await chrome.storage.local.get("history");
     historyList.innerHTML = "";
+    updateHistoryStats(history);
 
     if (history.length === 0) {
       historyList.innerHTML = '<div class="empty-state">No history yet. Fix some text on any page!</div>';
