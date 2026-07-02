@@ -200,6 +200,30 @@ const EN_TO_UA_MAP = {
   'Z':'Я','X':'Ч','C':'С','V':'М','B':'И','N':'Т','M':'Ь'
 };
 
+const HISTORY_LIMIT = 50;
+
+// Detailed history only keeps the most recent HISTORY_LIMIT entries. Anything
+// older is folded into lifetimeStats so aggregate totals survive forever.
+async function addHistoryEntry(entry) {
+  const { history = [] } = await chrome.storage.local.get("history");
+  const combined = [entry, ...history];
+  const kept = combined.slice(0, HISTORY_LIMIT);
+  const evicted = combined.slice(HISTORY_LIMIT);
+
+  if (evicted.length > 0) {
+    const { lifetimeStats = { count: 0, totalTimeMs: 0, totalTokens: 0 } } =
+      await chrome.storage.local.get("lifetimeStats");
+    for (const item of evicted) {
+      lifetimeStats.count += 1;
+      lifetimeStats.totalTimeMs += item.responseTimeMs || 0;
+      lifetimeStats.totalTokens += item.tokens?.total || 0;
+    }
+    await chrome.storage.local.set({ lifetimeStats });
+  }
+
+  await chrome.storage.local.set({ history: kept });
+}
+
 function translitKeyboard(text) {
   const cyrillicCount = [...text].filter(ch => /[а-яА-ЯіІїЇєЄ]/.test(ch)).length;
   const latinCount    = [...text].filter(ch => /[a-zA-Z]/.test(ch)).length;
@@ -224,16 +248,14 @@ async function processTranslit(originalText, tab) {
     return;
   }
 
-  const { history = [] } = await chrome.storage.local.get("history");
-  const updatedHistory = [{
+  await addHistoryEntry({
     timestamp: new Date().toISOString(),
     original: originalText,
     fixed: fixedText,
     action: "translit",
     tokens: null,
     responseTimeMs: 0
-  }, ...history].slice(0, 50);
-  await chrome.storage.local.set({ history: updatedHistory });
+  });
 
   safeSend({ action: "replaceText", originalText, fixedText });
   safeSend({ action: "showToast", message: "Layout fixed!", type: "success" });
@@ -322,15 +344,14 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
       return;
     }
 
-    const updatedHistory = [{
+    await addHistoryEntry({
       timestamp: new Date().toISOString(),
       original: originalText,
       fixed: fixedText,
       action,
       tokens,
       responseTimeMs
-    }, ...history].slice(0, 50);
-    await chrome.storage.local.set({ history: updatedHistory });
+    });
 
     safeSendMessage(tab.id, { action: "replaceText", originalText, fixedText });
     safeSendMessage(tab.id, { action: "showToast", message: "Done!", type: "success" });

@@ -449,6 +449,19 @@ if (!window.lbxFixErrorsInjected) {
     setTimeout(() => textarea.focus(), 50);
   }
 
+  // Rich-text editors (e.g. Slack) can wipe an entire editable region when the
+  // replaced selection included a non-text embed such as an @mention chip —
+  // execCommand("insertText") deletes the whole selection but the host page's
+  // own editor sometimes fails to reconcile that and clears the field. Detect
+  // that and restore the original text so the user's message isn't lost.
+  function insertTextGuarded(el, replacement, original) {
+    document.execCommand("insertText", false, replacement);
+    if (original.trim() && replacement.trim() && el.innerText.trim() === "") {
+      document.execCommand("insertText", false, original);
+      showToast("Couldn't safely replace this text (likely an @mention) — original text restored.", "error");
+    }
+  }
+
   function replaceSelectedText(original, replacement) {
     // If we have a saved selection from Reply Assist, restore it and use it
     if (savedSelectionInfo) {
@@ -472,7 +485,7 @@ if (!window.lbxFixErrorsInjected) {
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(info.range);
-        document.execCommand("insertText", false, replacement);
+        insertTextGuarded(el, replacement, original);
         return;
       }
 
@@ -506,7 +519,7 @@ if (!window.lbxFixErrorsInjected) {
 
     if (activeElement && activeElement.isContentEditable) {
       activeElement.focus();
-      document.execCommand("insertText", false, replacement);
+      insertTextGuarded(activeElement, replacement, original);
       return;
     }
 

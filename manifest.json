@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Fix Errors AI",
-  "version": "1.2.2",
-  "description": "Fixes grammar and translates selected text using Gemini AI.",
+  "version": "1.3",
+  "description": "Fix grammar, change tone, translate, or reply to messages on any site using AI — right from the right-click menu.",
   "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",

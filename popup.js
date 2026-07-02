@@ -193,9 +193,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     showPopupToast("Settings saved!", "success");
   });
 
-  // Clear History
+  // Clear History — fold the cleared entries into lifetimeStats first so the
+  // all-time totals never lose data just because the detail view was wiped.
   clearHistoryBtn.addEventListener("click", async () => {
     if (confirm("Are you sure you want to clear your history?")) {
+      const {
+        history = [],
+        lifetimeStats = { count: 0, totalTimeMs: 0, totalTokens: 0 }
+      } = await chrome.storage.local.get(["history", "lifetimeStats"]);
+
+      for (const item of history) {
+        lifetimeStats.count += 1;
+        lifetimeStats.totalTimeMs += item.responseTimeMs || 0;
+        lifetimeStats.totalTokens += item.tokens?.total || 0;
+      }
+
+      await chrome.storage.local.set({ lifetimeStats });
       await chrome.storage.local.remove("history");
       renderHistory();
     }
@@ -220,24 +233,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     return minutes + "m " + seconds + "s";
   }
 
-  function updateHistoryStats(history) {
+  // All-time stats include lifetimeStats (folded in once entries age out of the
+  // 50-item history) plus whatever is still sitting in the detailed history.
+  function updateHistoryStats(history, lifetimeStats) {
     const statCount = document.getElementById("stat-count");
     const statTime = document.getElementById("stat-time");
     const statTokens = document.getElementById("stat-tokens");
 
-    const totalTimeMs = history.reduce((sum, item) => sum + (item.responseTimeMs || 0), 0);
-    const totalTokens = history.reduce((sum, item) => sum + (item.tokens?.total || 0), 0);
+    const totalCount = lifetimeStats.count + history.length;
+    const totalTimeMs = lifetimeStats.totalTimeMs + history.reduce((sum, item) => sum + (item.responseTimeMs || 0), 0);
+    const totalTokens = lifetimeStats.totalTokens + history.reduce((sum, item) => sum + (item.tokens?.total || 0), 0);
 
-    statCount.textContent = history.length;
+    statCount.textContent = totalCount;
     statTime.textContent = formatDuration(totalTimeMs);
     statTokens.textContent = totalTokens.toLocaleString();
   }
 
   // Function to render history
   async function renderHistory() {
-    const { history = [] } = await chrome.storage.local.get("history");
+    const {
+      history = [],
+      lifetimeStats = { count: 0, totalTimeMs: 0, totalTokens: 0 }
+    } = await chrome.storage.local.get(["history", "lifetimeStats"]);
     historyList.innerHTML = "";
-    updateHistoryStats(history);
+    updateHistoryStats(history, lifetimeStats);
 
     if (history.length === 0) {
       historyList.innerHTML = '<div class="empty-state">No history yet. Fix some text on any page!</div>';
