@@ -1,0 +1,36 @@
+{
+  "name": "fix-errors-ai-desktop",
+  "version": "1.0.0",
+  "description": "Fix grammar, change tone, translate, or reply to messages using AI — standalone Windows app.",
+  "main": "main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.luigisbox.fixerrorsai",
+    "productName": "Fix Errors AI",
+    "files": [
+      "main/**/*",
+      "renderer/**/*",
+      "shared/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

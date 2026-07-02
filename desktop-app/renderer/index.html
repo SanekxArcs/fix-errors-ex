@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fix Errors AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="header">
+      <img src="Logo-Luigis-Box-16.png" alt="Logo">
+      <h2>Fix Errors AI</h2>
+    </div>
+
+    <div class="nav-buttons">
+      <button id="view-compose-btn" class="primary">Compose</button>
+      <button id="view-settings-btn">Settings</button>
+      <button id="view-history-btn">History</button>
+      <button id="view-prompts-btn">Prompts</button>
+    </div>
+
+    <!-- Compose View -->
+    <div id="compose-view" class="view-container active">
+      <div class="compose-toolbar">
+        <select id="actionSelect"></select>
+        <button id="run-btn" class="action-btn primary-action">Run</button>
+        <button id="cancel-btn" class="action-btn" style="display:none;">Cancel</button>
+      </div>
+
+      <div id="context-field">
+        <label for="contextInput">Context (optional, used by Reply Assist)</label>
+        <textarea id="contextInput" placeholder="Paste conversation, describe tone, or add instructions…"></textarea>
+      </div>
+
+      <div class="compose-grid">
+        <div class="compose-pane">
+          <label for="inputText">Original text</label>
+          <textarea id="inputText" placeholder="Paste or type text here…"></textarea>
+        </div>
+        <div class="compose-pane">
+          <label for="outputText">Result</label>
+          <textarea id="outputText" placeholder="Result will appear here…" readonly></textarea>
+        </div>
+      </div>
+
+      <div id="model-picker">
+        <div class="picker-header">Retry with model:</div>
+        <div id="model-picker-list"></div>
+      </div>
+
+      <div class="flex-row">
+        <button id="copy-result-btn" class="action-btn">Copy Result</button>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div id="settings-view" class="view-container">
+      <h3>AI Provider</h3>
+      <div class="form-group">
+        <select id="providerSelect">
+          <option value="gemini">Google Gemini</option>
+          <option value="lmstudio">LM Studio (Local)</option>
+        </select>
+      </div>
+
+      <div id="gemini-section" class="provider-section">
+        <div class="form-group">
+          <label for="apiKey">Gemini API Key</label>
+          <input type="password" id="apiKey" placeholder="Paste your API key here" />
+        </div>
+        <div class="form-group">
+          <label for="modelSelect">Primary Model</label>
+          <select id="modelSelect"></select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="fallbackModelSelect">Fallback Model (Optional)</label>
+          <select id="fallbackModelSelect"></select>
+        </div>
+      </div>
+
+      <div id="lmstudio-section" class="provider-section" style="display: none;">
+        <div class="form-group">
+          <label for="lmStudioUrl">Server URL</label>
+          <input type="text" id="lmStudioUrl" placeholder="http://localhost:1234" />
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="lmStudioModel">Model Identifier</label>
+          <input type="text" id="lmStudioModel" placeholder="e.g. qwen2.5-7b-instruct" />
+        </div>
+      </div>
+
+      <h3>General</h3>
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+        <input type="checkbox" id="includeContext" style="width: 14px; height: 14px; cursor: pointer;">
+        <label for="includeContext" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Include recent history as context (experimental)</label>
+      </div>
+
+      <button id="save-btn" class="action-btn primary-action">Save Settings</button>
+    </div>
+
+    <!-- History View -->
+    <div id="history-view" class="view-container">
+      <h3>All-Time Stats</h3>
+      <div id="history-stats">
+        <div class="stat-box">
+          <span id="stat-count" class="stat-value">0</span>
+          <span class="stat-label">Corrected</span>
+        </div>
+        <div class="stat-box">
+          <span id="stat-time" class="stat-value">0s</span>
+          <span class="stat-label">Total Time</span>
+        </div>
+        <div class="stat-box">
+          <span id="stat-tokens" class="stat-value">0</span>
+          <span class="stat-label">Tokens Used</span>
+        </div>
+      </div>
+      <h3>Recent Edits (last 50)</h3>
+      <div id="history-list"></div>
+      <div class="flex-row">
+        <button id="clear-history-btn" class="action-btn danger">Clear History</button>
+      </div>
+    </div>
+
+    <!-- Prompts View -->
+    <div id="prompts-view" class="view-container">
+      <h3>System Prompts</h3>
+      <p style="font-size: 10px; color: #666; margin-bottom: 15px;">Customize how the AI behaves for each action.</p>
+      <div id="prompts-list"></div>
+      <div class="flex-row">
+        <button id="save-prompts-btn" class="action-btn primary-action">Save Prompts</button>
+        <button id="reset-prompts-btn" class="action-btn">Reset Defaults</button>
+      </div>
+    </div>
+
+    <div id="app-toast"></div>
+
+    <script src="../shared/constants.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
