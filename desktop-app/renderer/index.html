@@ -93,6 +93,33 @@
         <input type="checkbox" id="includeContext" style="width: 14px; height: 14px; cursor: pointer;">
         <label for="includeContext" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Include recent history as context (experimental)</label>
       </div>
+      <div class="form-group">
+        <label for="globalHotkey">Global show/hide hotkey</label>
+        <input type="text" id="globalHotkey" placeholder="Control+Shift+F" />
+        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
+          Brings the app to the front from anywhere, even minimized to tray. Leave blank to disable.
+          Uses Electron accelerator format, e.g. <code>Control+Shift+F</code> or <code>Alt+Space</code>.
+        </p>
+      </div>
+
+      <h3>Quick Fix (system-wide)</h3>
+      <div class="form-group">
+        <label for="quickFixHotkey">Quick Fix hotkey</label>
+        <input type="text" id="quickFixHotkey" placeholder="Control+Shift+G" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="quickFixAction">Action to run</label>
+        <select id="quickFixAction"></select>
+        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
+          Select text in <em>any</em> Windows app (VS Code, a chat app, Explorer's rename box, etc.),
+          press this hotkey, and the selection is copied, sent to the AI, and pasted back in place —
+          without opening this app's window. Must be different from the show/hide hotkey above. Leave blank to disable.
+          <br><br>
+          This works by simulating Ctrl+C / Ctrl+V, so it inherits a couple of OS quirks:
+          in terminal apps Ctrl+C often means "interrupt" instead of "copy," and apps running
+          as Administrator will silently ignore the simulated keys unless this app also runs elevated.
+        </p>
+      </div>
 
       <button id="save-btn" class="action-btn primary-action">Save Settings</button>
     </div>

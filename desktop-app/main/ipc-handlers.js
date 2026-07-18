@@ -119,7 +119,7 @@ async function retryWithModel(originalText, action, context, model) {
   }
 }
 
-function registerIpcHandlers() {
+function registerIpcHandlers({ onHotkeyChange } = {}) {
   ipcMain.handle('runAction', (event, text, action, context) => runAction(text, action, context));
 
   ipcMain.handle('cancelRun', () => {
@@ -133,7 +133,13 @@ function registerIpcHandlers() {
   ipcMain.handle('retryWithModel', (event, originalText, action, context, model) => retryWithModel(originalText, action, context, model));
 
   ipcMain.handle('getSettings', () => store.getSettings());
-  ipcMain.handle('saveSettings', (event, settings) => { store.saveSettings(settings); return { ok: true }; });
+  ipcMain.handle('saveSettings', (event, settings) => {
+    store.saveSettings(settings);
+    const { toggleOk, quickFixOk } = onHotkeyChange
+      ? onHotkeyChange(settings)
+      : { toggleOk: true, quickFixOk: true };
+    return { ok: true, hotkeyOk: toggleOk, quickFixHotkeyOk: quickFixOk };
+  });
 
   ipcMain.handle('getHistory', () => store.getHistory());
   ipcMain.handle('clearHistory', () => { store.clearHistory(); return { ok: true }; });

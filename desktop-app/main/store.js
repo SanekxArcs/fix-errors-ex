@@ -12,6 +12,9 @@ const store = new Store({
     lmStudioUrl: DEFAULT_LM_STUDIO_URL,
     lmStudioModel: '',
     includeContext: false,
+    globalHotkey: 'Control+Shift+F',
+    quickFixHotkey: 'Control+Shift+G',
+    quickFixAction: 'fixGrammar',
     customPrompts: {},
     history: [],
     lifetimeStats: { count: 0, totalTimeMs: 0, totalTokens: 0 }
@@ -26,7 +29,10 @@ function getSettings() {
     geminiFallbackModel: store.get('geminiFallbackModel'),
     lmStudioUrl: store.get('lmStudioUrl'),
     lmStudioModel: store.get('lmStudioModel'),
-    includeContext: store.get('includeContext')
+    includeContext: store.get('includeContext'),
+    globalHotkey: store.get('globalHotkey'),
+    quickFixHotkey: store.get('quickFixHotkey'),
+    quickFixAction: store.get('quickFixAction')
   };
 }
 
@@ -38,7 +44,10 @@ function saveSettings(settings) {
     geminiFallbackModel: settings.geminiFallbackModel,
     lmStudioUrl: settings.lmStudioUrl,
     lmStudioModel: settings.lmStudioModel,
-    includeContext: settings.includeContext
+    includeContext: settings.includeContext,
+    globalHotkey: settings.globalHotkey,
+    quickFixHotkey: settings.quickFixHotkey,
+    quickFixAction: settings.quickFixAction
   });
 }
 

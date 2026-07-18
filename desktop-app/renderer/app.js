@@ -168,6 +168,9 @@ function initSettingsView() {
   const lmStudioUrlInput = document.getElementById("lmStudioUrl");
   const lmStudioModelInput = document.getElementById("lmStudioModel");
   const includeContextCheckbox = document.getElementById("includeContext");
+  const globalHotkeyInput = document.getElementById("globalHotkey");
+  const quickFixHotkeyInput = document.getElementById("quickFixHotkey");
+  const quickFixActionSelect = document.getElementById("quickFixAction");
   const saveBtn = document.getElementById("save-btn");
 
   function applyProviderUI(provider) {
@@ -206,7 +209,18 @@ function initSettingsView() {
     });
   }
 
+  function populateQuickFixActionSelect() {
+    quickFixActionSelect.innerHTML = "";
+    Object.entries(ACTION_LABELS).forEach(([id, label]) => {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = label;
+      quickFixActionSelect.appendChild(option);
+    });
+  }
+
   populateModelSelects();
+  populateQuickFixActionSelect();
 
   async function loadSettings() {
     const settings = await window.api.getSettings();
@@ -218,6 +232,9 @@ function initSettingsView() {
     includeContextCheckbox.checked = !!settings.includeContext;
     lmStudioUrlInput.value = settings.lmStudioUrl || DEFAULT_LM_STUDIO_URL;
     lmStudioModelInput.value = settings.lmStudioModel || "";
+    globalHotkeyInput.value = settings.globalHotkey ?? "Control+Shift+F";
+    quickFixHotkeyInput.value = settings.quickFixHotkey ?? "Control+Shift+G";
+    quickFixActionSelect.value = settings.quickFixAction || "fixGrammar";
   }
 
   saveBtn.addEventListener("click", async () => {
@@ -229,16 +246,28 @@ function initSettingsView() {
       return;
     }
 
-    await window.api.saveSettings({
+    const result = await window.api.saveSettings({
       aiProvider: provider,
       geminiApiKey: key,
       geminiModel: modelSelect.value || DEFAULT_GEMINI_MODEL,
       geminiFallbackModel: fallbackModelSelect.value,
       includeContext: includeContextCheckbox.checked,
       lmStudioUrl: lmStudioUrlInput.value.trim() || DEFAULT_LM_STUDIO_URL,
-      lmStudioModel: lmStudioModelInput.value.trim()
+      lmStudioModel: lmStudioModelInput.value.trim(),
+      globalHotkey: globalHotkeyInput.value.trim(),
+      quickFixHotkey: quickFixHotkeyInput.value.trim(),
+      quickFixAction: quickFixActionSelect.value
     });
-    showToast("Settings saved!", "success");
+
+    if (result.hotkeyOk === false && result.quickFixHotkeyOk === false) {
+      showToast("Settings saved, but neither hotkey could be registered (already in use, or the two are identical).", "error");
+    } else if (result.hotkeyOk === false) {
+      showToast("Settings saved, but the show/hide hotkey is already in use by another app.", "error");
+    } else if (result.quickFixHotkeyOk === false) {
+      showToast("Settings saved, but the Quick Fix hotkey is already in use (or matches the show/hide hotkey).", "error");
+    } else {
+      showToast("Settings saved!", "success");
+    }
   });
 
   loadSettings();
