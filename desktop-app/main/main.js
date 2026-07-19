@@ -4,6 +4,14 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 const store = require('./store');
 const { runQuickFix } = require('./quick-fix');
 
+// This is a small compose/utility window, not a graphics app — trading GPU
+// compositing for software rendering avoids a real-world crash where a flaky
+// GPU process (driver conflicts, several other Electron/Chromium apps
+// fighting over the GPU) retries a few times and then Chromium fatally kills
+// the whole process ("GPU process isn't usable. Goodbye."), which looks like
+// "app flashes a white window and quits" to the user.
+app.disableHardwareAcceleration();
+
 const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.ico');
 
 let mainWindow = null;

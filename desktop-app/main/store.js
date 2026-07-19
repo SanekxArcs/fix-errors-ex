@@ -13,7 +13,7 @@ const store = new Store({
     lmStudioModel: '',
     includeContext: false,
     globalHotkey: 'Control+Shift+F',
-    quickFixHotkey: 'Control+Shift+G',
+    quickFixHotkey: 'Shift+Alt+G',
     quickFixAction: 'fixGrammar',
     customPrompts: {},
     history: [],

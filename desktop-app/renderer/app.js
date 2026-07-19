@@ -233,7 +233,7 @@ function initSettingsView() {
     lmStudioUrlInput.value = settings.lmStudioUrl || DEFAULT_LM_STUDIO_URL;
     lmStudioModelInput.value = settings.lmStudioModel || "";
     globalHotkeyInput.value = settings.globalHotkey ?? "Control+Shift+F";
-    quickFixHotkeyInput.value = settings.quickFixHotkey ?? "Control+Shift+G";
+    quickFixHotkeyInput.value = settings.quickFixHotkey ?? "Shift+Alt+G";
     quickFixActionSelect.value = settings.quickFixAction || "fixGrammar";
   }
 
