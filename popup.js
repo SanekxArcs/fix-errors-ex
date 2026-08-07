@@ -164,6 +164,32 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadPrompts();
   });
 
+  // Toggle API Key visibility
+  const toggleApiKeyBtn = document.getElementById("toggle-api-key-btn");
+  toggleApiKeyBtn.addEventListener("click", () => {
+    const isHidden = apiKeyInput.type === "password";
+    apiKeyInput.type = isHidden ? "text" : "password";
+    toggleApiKeyBtn.textContent = isHidden ? "🙈" : "👁";
+  });
+
+  // Copy API Key
+  const copyApiKeyBtn = document.getElementById("copy-api-key-btn");
+  copyApiKeyBtn.addEventListener("click", async () => {
+    const key = apiKeyInput.value.trim();
+    if (!key) {
+      showPopupToast("No API key to copy.", "error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(key);
+      copyApiKeyBtn.classList.add("success");
+      setTimeout(() => copyApiKeyBtn.classList.remove("success"), 1500);
+      showPopupToast("API key copied!", "success");
+    } catch (err) {
+      showPopupToast("Failed to copy API key.", "error");
+    }
+  });
+
   // Save API Key
   saveBtn.addEventListener("click", async () => {
     const provider = providerSelect.value;

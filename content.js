@@ -76,6 +76,17 @@ if (!window.lbxFixErrorsInjected) {
     return (node.textContent || "").trim().length <= 60;
   }
 
+  // Walks down from the range boundary's immediate child through block wrappers
+  // (e.g. Slack wraps a message in <p>) to find the actual edge node — a leaf or
+  // an atomic chip — instead of stopping at the wrapper itself.
+  function deepEdgeNode(container, offset, direction) {
+    let node = direction === "start" ? container.childNodes[offset] : container.childNodes[offset - 1];
+    while (node && node.nodeType === Node.ELEMENT_NODE && node.childNodes.length && !isLikelyAtomicChip(node)) {
+      node = direction === "start" ? node.firstChild : node.lastChild;
+    }
+    return node;
+  }
+
   // Shrinks a Range so a leading/trailing atomic chip is excluded (left in the DOM
   // untouched). Returns the excluded chip text so callers can still show/log the
   // full message. Reverts if excluding the edges would leave nothing to fix.
@@ -88,7 +99,7 @@ if (!window.lbxFixErrorsInjected) {
     let trailingText = "";
 
     if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
-      const node = range.startContainer.childNodes[range.startOffset];
+      const node = deepEdgeNode(range.startContainer, range.startOffset, "start");
       if (isLikelyAtomicChip(node)) {
         leadingText = node.textContent || "";
         range.setStartAfter(node);
@@ -96,7 +107,7 @@ if (!window.lbxFixErrorsInjected) {
     }
 
     if (!range.collapsed && range.endContainer.nodeType === Node.ELEMENT_NODE) {
-      const node = range.endContainer.childNodes[range.endOffset - 1];
+      const node = deepEdgeNode(range.endContainer, range.endOffset, "end");
       if (isLikelyAtomicChip(node)) {
         trailingText = node.textContent || "";
         range.setEndBefore(node);
@@ -512,12 +523,44 @@ if (!window.lbxFixErrorsInjected) {
     setTimeout(() => textarea.focus(), 50);
   }
 
+  // When a selection boundary sits immediately next to an inline element (e.g. a
+  // Slack @mention chip left in place by excludeEdgeAtomicNodes),
+  // execCommand("insertText") tends to type INTO that element instead of beside
+  // it, corrupting the chip. Insert a tiny real text-node buffer via direct DOM
+  // ops (not Range) so the caret unambiguously lands in plain text first.
+  function bufferAwayFromAdjacentElement(range) {
+    const wasCollapsed = range.collapsed;
+
+    if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+      const prev = range.startContainer.childNodes[range.startOffset - 1];
+      if (prev && prev.nodeType === Node.ELEMENT_NODE) {
+        const buffer = document.createTextNode("\u200B");
+        range.startContainer.insertBefore(buffer, range.startContainer.childNodes[range.startOffset] || null);
+        range.setStart(buffer, 1);
+        if (wasCollapsed) range.setEnd(buffer, 1);
+      }
+    }
+
+    if (!wasCollapsed && range.endContainer.nodeType === Node.ELEMENT_NODE) {
+      const next = range.endContainer.childNodes[range.endOffset];
+      if (next && next.nodeType === Node.ELEMENT_NODE) {
+        const buffer = document.createTextNode("\u200B");
+        range.endContainer.insertBefore(buffer, next);
+        range.setEnd(buffer, 0);
+      }
+    }
+  }
+
   // Rich-text editors (e.g. Slack) can wipe an entire editable region when the
   // replaced selection included a non-text embed such as an @mention chip —
   // execCommand("insertText") deletes the whole selection but the host page's
   // own editor sometimes fails to reconcile that and clears the field. Detect
   // that and restore the original text so the user's message isn't lost.
   function insertTextGuarded(el, replacement, original) {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+      bufferAwayFromAdjacentElement(sel.getRangeAt(0));
+    }
     document.execCommand("insertText", false, replacement);
     if (original.trim() && replacement.trim() && el.innerText.trim() === "") {
       document.execCommand("insertText", false, original);

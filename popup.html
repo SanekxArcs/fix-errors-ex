@@ -115,6 +115,36 @@
         color: #fff;
       }
 
+      .input-group {
+        display: flex;
+        gap: 6px;
+      }
+      .input-group input {
+        flex: 1;
+        min-width: 0;
+      }
+      .icon-btn {
+        flex-shrink: 0;
+        width: 32px;
+        padding: 0;
+        background: #1e1e1e;
+        border: 1px solid #2a2a2a;
+        border-radius: 4px;
+        color: #999;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .icon-btn:hover {
+        background: #2a2a2a;
+        color: #fff;
+        border-color: #3b82f6;
+      }
+      .icon-btn.success {
+        color: #4ade80;
+        border-color: #166534;
+      }
+
       .provider-section {
         background: #1c1c1c;
         border: 1px solid #252525;
@@ -371,7 +401,11 @@
       <div id="gemini-section" class="provider-section">
         <div class="form-group">
           <label for="apiKey">Gemini API Key</label>
-          <input type="password" id="apiKey" placeholder="Paste your API key here" />
+          <div class="input-group">
+            <input type="password" id="apiKey" placeholder="Paste your API key here" />
+            <button type="button" id="toggle-api-key-btn" class="icon-btn" title="Show/hide API key">👁</button>
+            <button type="button" id="copy-api-key-btn" class="icon-btn" title="Copy API key">⧉</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="modelSelect">Primary Model</label>
