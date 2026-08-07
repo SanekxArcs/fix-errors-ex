@@ -43,11 +43,74 @@ if (!window.lbxFixErrorsInjected) {
           selection.addRange(range);
         }
       }
+
+      // Chat apps (Slack, Teams, etc.) often render an @mention as an atomic chip
+      // element rather than plain text. If one sits at the edge of the selection,
+      // shrink the selection to exclude it so it's never touched by the replace step.
+      let leadingText = "", trailingText = "";
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0 && activeElement && activeElement.isContentEditable) {
+        const range = selection.getRangeAt(0);
+        const edges = excludeEdgeAtomicNodes(range);
+        leadingText = edges.leadingText;
+        trailingText = edges.trailingText;
+        if (leadingText || trailingText) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+
       const text = window.getSelection().toString();
-      if (sendResponse) sendResponse({ text });
+      if (sendResponse) sendResponse({ text, leadingText, trailingText });
     }
     return true;
   });
+
+  // A real mention/hashtag/emoji chip is a small inline element — never a block
+  // wrapper that likely holds the entire message (which would empty the selection).
+  function isLikelyAtomicChip(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    if (node.tagName === "DIV" || node.tagName === "P" || node.tagName === "SECTION" || node.tagName === "ARTICLE") {
+      return false;
+    }
+    return (node.textContent || "").trim().length <= 60;
+  }
+
+  // Shrinks a Range so a leading/trailing atomic chip is excluded (left in the DOM
+  // untouched). Returns the excluded chip text so callers can still show/log the
+  // full message. Reverts if excluding the edges would leave nothing to fix.
+  function excludeEdgeAtomicNodes(range) {
+    if (range.collapsed) return { leadingText: "", trailingText: "" };
+
+    const originalStart = { container: range.startContainer, offset: range.startOffset };
+    const originalEnd = { container: range.endContainer, offset: range.endOffset };
+    let leadingText = "";
+    let trailingText = "";
+
+    if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+      const node = range.startContainer.childNodes[range.startOffset];
+      if (isLikelyAtomicChip(node)) {
+        leadingText = node.textContent || "";
+        range.setStartAfter(node);
+      }
+    }
+
+    if (!range.collapsed && range.endContainer.nodeType === Node.ELEMENT_NODE) {
+      const node = range.endContainer.childNodes[range.endOffset - 1];
+      if (isLikelyAtomicChip(node)) {
+        trailingText = node.textContent || "";
+        range.setEndBefore(node);
+      }
+    }
+
+    if (!range.toString().trim() && (leadingText || trailingText)) {
+      range.setStart(originalStart.container, originalStart.offset);
+      range.setEnd(originalEnd.container, originalEnd.offset);
+      return { leadingText: "", trailingText: "" };
+    }
+
+    return { leadingText, trailingText };
+  }
 
   // Capture the current selection state before showing the panel.
   // Must be called synchronously before any focus change occurs.

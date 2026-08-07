@@ -152,7 +152,10 @@ chrome.commands.onCommand.addListener(async (command) => {
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll });
       if (response && response.text && response.text.trim()) {
-        await processTextWithAI(response.text, tab, "fixGrammar");
+        await processTextWithAI(response.text, tab, "fixGrammar", "", null, {
+          leadingText: response.leadingText,
+          trailingText: response.trailingText
+        });
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
@@ -162,7 +165,10 @@ chrome.commands.onCommand.addListener(async (command) => {
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
       if (response && response.text && response.text.trim()) {
-        await processTextWithAI(response.text, tab, "fixGrammar");
+        await processTextWithAI(response.text, tab, "fixGrammar", "", null, {
+          leadingText: response.leadingText,
+          trailingText: response.trailingText
+        });
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
@@ -263,9 +269,17 @@ async function processTranslit(originalText, tab) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// edgeInfo: leading/trailing chip text (e.g. an @mention) excluded from the DOM selection
+// so it's never touched — kept only to make the history entry show the full message.
+function composeWithEdges(text, edgeInfo) {
+  if (!edgeInfo) return text;
+  const { leadingText = "", trailingText = "" } = edgeInfo;
+  return [leadingText, text, trailingText].filter(Boolean).join(" ").trim();
+}
+
 // modelOverride: when set, skip the normal provider/model config and use this specific Gemini model.
 // Used by the "Retry with model" flow after a capacity error.
-async function processTextWithAI(originalText, tab, action, context = "", modelOverride = null) {
+async function processTextWithAI(originalText, tab, action, context = "", modelOverride = null, edgeInfo = null) {
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
   } catch (e) {
@@ -346,8 +360,8 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
 
     await addHistoryEntry({
       timestamp: new Date().toISOString(),
-      original: originalText,
-      fixed: fixedText,
+      original: composeWithEdges(originalText, edgeInfo),
+      fixed: composeWithEdges(fixedText, edgeInfo),
       action,
       tokens,
       responseTimeMs
