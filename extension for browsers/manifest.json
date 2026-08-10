@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fix Errors AI",
-  "version": "1.5",
+  "version": "1.6.0",
   "description": "Fix grammar, change tone, translate, or reply to messages on any site using AI — right from the right-click menu.",
   "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
   "host_permissions": [

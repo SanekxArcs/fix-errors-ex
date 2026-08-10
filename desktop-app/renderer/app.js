@@ -154,6 +154,20 @@ function initComposeView() {
       }, 2000);
     });
   });
+
+  window.api.onReplyAssist((payload) => {
+    if (!payload?.selectedText) return;
+    actionSelect.value = "replyAssist";
+    updateContextVisibility();
+    inputText.value = payload.selectedText;
+    outputText.value = "";
+    contextInput.value = "";
+    hideModelPicker();
+    setRunning(false);
+    document.getElementById("view-compose-btn").click();
+    contextInput.focus();
+    showToast("Reply Assist is ready. Add context if needed, then press Run.", "info");
+  });
 }
 
 // ─── Settings View ──────────────────────────────────────────────────────────
@@ -168,8 +182,10 @@ function initSettingsView() {
   const lmStudioUrlInput = document.getElementById("lmStudioUrl");
   const lmStudioModelInput = document.getElementById("lmStudioModel");
   const includeContextCheckbox = document.getElementById("includeContext");
+  const autoStartCheckbox = document.getElementById("autoStart");
   const globalHotkeyInput = document.getElementById("globalHotkey");
   const quickFixHotkeyInput = document.getElementById("quickFixHotkey");
+  const translitHotkeyInput = document.getElementById("translitHotkey");
   const quickFixActionSelect = document.getElementById("quickFixAction");
   const saveBtn = document.getElementById("save-btn");
 
@@ -230,10 +246,12 @@ function initSettingsView() {
     modelSelect.value = settings.geminiModel || DEFAULT_GEMINI_MODEL;
     fallbackModelSelect.value = settings.geminiFallbackModel || "";
     includeContextCheckbox.checked = !!settings.includeContext;
+    autoStartCheckbox.checked = !!settings.autoStart;
     lmStudioUrlInput.value = settings.lmStudioUrl || DEFAULT_LM_STUDIO_URL;
     lmStudioModelInput.value = settings.lmStudioModel || "";
     globalHotkeyInput.value = settings.globalHotkey ?? "Control+Shift+F";
     quickFixHotkeyInput.value = settings.quickFixHotkey ?? "Shift+Alt+G";
+    translitHotkeyInput.value = settings.translitHotkey ?? "Shift+Alt+L";
     quickFixActionSelect.value = settings.quickFixAction || "fixGrammar";
   }
 
@@ -256,15 +274,23 @@ function initSettingsView() {
       lmStudioModel: lmStudioModelInput.value.trim(),
       globalHotkey: globalHotkeyInput.value.trim(),
       quickFixHotkey: quickFixHotkeyInput.value.trim(),
+      autoStart: autoStartCheckbox.checked,
+      translitHotkey: translitHotkeyInput.value.trim(),
       quickFixAction: quickFixActionSelect.value
     });
 
-    if (result.hotkeyOk === false && result.quickFixHotkeyOk === false) {
-      showToast("Settings saved, but neither hotkey could be registered (already in use, or the two are identical).", "error");
+    if (result.hotkeyOk === false && result.quickFixHotkeyOk === false && result.translitHotkeyOk === false) {
+      showToast("Settings saved, but none of the hotkeys could be registered.", "error");
     } else if (result.hotkeyOk === false) {
       showToast("Settings saved, but the show/hide hotkey is already in use by another app.", "error");
     } else if (result.quickFixHotkeyOk === false) {
       showToast("Settings saved, but the Quick Fix hotkey is already in use (or matches the show/hide hotkey).", "error");
+    } else if (result.translitHotkeyOk === false) {
+      showToast("Settings saved, but the keyboard layout hotkey is already in use (or matches another hotkey).", "error");
+    } else if (Object.values(result.promptHotkeyOk || {}).some(ok => ok === false)) {
+      showToast("Settings saved, but one or more prompt hotkeys could not be registered. Check the Prompts tab.", "error");
+    } else if (result.autoStartOk === false) {
+      showToast("Settings saved, but Windows startup could not be updated.", "error");
     } else {
       showToast("Settings saved!", "success");
     }
@@ -363,23 +389,40 @@ function initHistoryView() {
 
 async function loadPrompts() {
   const promptsList = document.getElementById("prompts-list");
-  const customPrompts = await window.api.getPrompts();
+  const [customPrompts, promptHotkeys] = await Promise.all([
+    window.api.getPrompts(),
+    window.api.getPromptHotkeys()
+  ]);
   promptsList.innerHTML = "";
 
   Object.entries(ACTION_LABELS).forEach(([id, label]) => {
     const item = document.createElement("div");
     item.className = "prompt-item";
 
+    const header = document.createElement("div");
+    header.className = "prompt-header";
+
     const lbl = document.createElement("label");
     lbl.setAttribute("for", `prompt-${id}`);
     lbl.textContent = label;
+
+    const hotkeyInput = document.createElement("input");
+    hotkeyInput.type = "text";
+    hotkeyInput.id = `prompt-hotkey-${id}`;
+    hotkeyInput.className = "prompt-hotkey";
+    hotkeyInput.placeholder = "Shortcut (optional)";
+    hotkeyInput.value = promptHotkeys[id] || "";
+    hotkeyInput.title = "Optional global Electron shortcut, for example Control+Alt+1";
+
+    header.appendChild(lbl);
+    header.appendChild(hotkeyInput);
 
     const ta = document.createElement("textarea");
     ta.id = `prompt-${id}`;
     ta.rows = 4;
     ta.value = customPrompts[id] || DEFAULT_PROMPTS[id] || "";
 
-    item.appendChild(lbl);
+    item.appendChild(header);
     item.appendChild(ta);
     promptsList.appendChild(item);
   });
@@ -388,15 +431,23 @@ async function loadPrompts() {
 function initPromptsView() {
   document.getElementById("save-prompts-btn").addEventListener("click", async () => {
     const saved = {};
+    const savedHotkeys = {};
     Object.keys(ACTION_LABELS).forEach(id => {
       const ta = document.getElementById(`prompt-${id}`);
       if (ta) saved[id] = ta.value.trim();
+      const hotkey = document.getElementById(`prompt-hotkey-${id}`);
+      if (hotkey) savedHotkeys[id] = hotkey.value.trim();
     });
-    await window.api.savePrompts(saved);
+    const result = await window.api.savePrompts(saved, savedHotkeys);
     const btn = document.getElementById("save-prompts-btn");
     const original = btn.textContent;
     btn.textContent = "Saved!";
     setTimeout(() => { btn.textContent = original; }, 1500);
+    if (Object.values(result.promptHotkeyOk || {}).some(ok => ok === false)) {
+      showToast("Prompts saved, but one or more shortcuts could not be registered.", "error");
+    } else {
+      showToast("Prompts and shortcuts saved!", "success");
+    }
   });
 
   document.getElementById("reset-prompts-btn").addEventListener("click", async () => {

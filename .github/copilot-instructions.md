@@ -2,19 +2,20 @@
 
 ## Project Overview
 
-**Fix Errors AI** is a Chrome Extension (Manifest V3) that lets users process selected text on any webpage via a right-click context menu or a keyboard shortcut. All text processing is powered by the **Google Gemini 2.5 Flash** API.
+**Fix Errors AI** contains a Chrome Extension (Manifest V3) in `extension for browsers/` and a standalone Windows desktop app in `desktop-app/`. The extension lets users process selected text on any webpage via a right-click context menu or a keyboard shortcut. All text processing is powered by the Google Gemini API.
 
 ---
 
 ## File Structure
 
 ```
-manifest.json     — Extension manifest (MV3): permissions, commands, content scripts
-background.js     — Service worker: context menu setup, shortcut handler, Gemini API calls
-content.js        — Injected into every page: handles text replacement, toast UI, selection getter
-popup.html        — Extension popup: Settings / History / Shortcuts tabs (inline CSS)
-popup.js          — Popup logic: view switching, API key save, history rendering, shortcut display
-icons/            — PNG icons at 16×16, 48×48, 128×128
+extension for browsers/
+  manifest.json   — Extension manifest (MV3): permissions, commands, content scripts
+  background.js   — Service worker: context menu setup, shortcut handler, Gemini API calls
+  content.js      — Injected into every page: handles text replacement, toast UI, selection getter
+  popup.html      — Extension popup: Settings / History / Shortcuts tabs (inline CSS)
+  popup.js        — Popup logic: view switching, API key save, history rendering, shortcut display
+  icons/          — PNG icons at 16×16, 48×48, 128×128
 ```
 
 ---
@@ -24,10 +25,10 @@ icons/            — PNG icons at 16×16, 48×48, 128×128
 1. User selects text on a page, then either:
    - Right-clicks → **AI Text Tools** context menu → picks an action, **or**
    - Presses the keyboard shortcut (`Alt+Shift+F` by default) → triggers `fix_grammar` command
-2. `background.js` (service worker) receives the event, injects `content.js` if not already present, then calls `callGeminiAI(text, apiKey, action)`.
+2. `extension for browsers/background.js` (service worker) receives the event, injects `content.js` if not already present, then calls `callGeminiAI(text, apiKey, action)`.
 3. `callGeminiAI` maps the `action` string to a tailored prompt and POSTs to the Gemini REST API with a **30-second `AbortSignal` timeout**.
-4. The result is sent back to `content.js` via `chrome.tabs.sendMessage` with `action: "replaceText"`.
-5. `content.js` replaces the selection in `<input>`, `<textarea>`, or `contenteditable` elements; fires `input` and `change` events for framework compatibility.
+4. The result is sent back to `extension for browsers/content.js` via `chrome.tabs.sendMessage` with `action: "replaceText"`.
+5. `extension for browsers/content.js` replaces the selection in `<input>`, `<textarea>`, or `contenteditable` elements; fires `input` and `change` events for framework compatibility.
 6. A toast notification (bottom-right) shows working / success / error state.
 7. Each processed entry is saved to `chrome.storage.local` under the `history` key (max 50 items), including the `action` field.
 
@@ -96,7 +97,7 @@ AI Text Tools (parent, shown on text selection)
 
 - Command name: `fix_grammar`
 - Default: `Alt+Shift+F`
-- Defined in `manifest.json` under `"commands"`.
+- Defined in `extension for browsers/manifest.json` under `"commands"`.
 - Triggers `fixGrammar` action on the currently selected text.
 - User can override it at `chrome://extensions/shortcuts`.
 - The popup's **Shortcuts** tab reads the live binding via `chrome.commands.getAll()`.

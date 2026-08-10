@@ -186,7 +186,9 @@ input:focus, select:focus, textarea:focus { border-color: #3b82f6; color: #fff; 
 
 /* ── Prompts View ── */
 .prompt-item { margin-bottom: 16px; background: #1c1c1c; border: 1px solid #252525; border-radius: 6px; padding: 12px; }
-.prompt-item label { color: #fff; margin-bottom: 8px; font-size: 12px; }
+.prompt-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.prompt-item label { color: #fff; margin-bottom: 0; font-size: 12px; }
+.prompt-hotkey { width: 190px !important; flex: 0 0 190px; padding: 6px 8px !important; font-size: 11px !important; }
 
 /* ── Toast ── */
 #app-toast {

@@ -1,6 +1,6 @@
 {
   "name": "fix-errors-ai-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Fix grammar, change tone, translate, or reply to messages using AI — standalone Windows app.",
   "main": "main/main.js",
   "private": true,

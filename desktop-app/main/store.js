@@ -12,8 +12,11 @@ const store = new Store({
     lmStudioUrl: DEFAULT_LM_STUDIO_URL,
     lmStudioModel: '',
     includeContext: false,
+    autoStart: false,
     globalHotkey: 'Control+Shift+F',
     quickFixHotkey: 'Shift+Alt+G',
+    translitHotkey: 'Shift+Alt+L',
+    promptHotkeys: {},
     quickFixAction: 'fixGrammar',
     customPrompts: {},
     history: [],
@@ -30,8 +33,11 @@ function getSettings() {
     lmStudioUrl: store.get('lmStudioUrl'),
     lmStudioModel: store.get('lmStudioModel'),
     includeContext: store.get('includeContext'),
+    autoStart: store.get('autoStart'),
     globalHotkey: store.get('globalHotkey'),
     quickFixHotkey: store.get('quickFixHotkey'),
+    translitHotkey: store.get('translitHotkey'),
+    promptHotkeys: store.get('promptHotkeys'),
     quickFixAction: store.get('quickFixAction')
   };
 }
@@ -45,8 +51,10 @@ function saveSettings(settings) {
     lmStudioUrl: settings.lmStudioUrl,
     lmStudioModel: settings.lmStudioModel,
     includeContext: settings.includeContext,
+    autoStart: settings.autoStart,
     globalHotkey: settings.globalHotkey,
     quickFixHotkey: settings.quickFixHotkey,
+    translitHotkey: settings.translitHotkey,
     quickFixAction: settings.quickFixAction
   });
 }
@@ -62,6 +70,14 @@ function savePrompts(prompts) {
 function resetPrompts() {
   store.delete('customPrompts');
   store.set('customPrompts', {});
+}
+
+function getPromptHotkeys() {
+  return store.get('promptHotkeys') || {};
+}
+
+function savePromptHotkeys(promptHotkeys) {
+  store.set('promptHotkeys', promptHotkeys || {});
 }
 
 function getHistory() {
@@ -109,6 +125,8 @@ module.exports = {
   getPrompts,
   savePrompts,
   resetPrompts,
+  getPromptHotkeys,
+  savePromptHotkeys,
   getHistory,
   addHistoryEntry,
   clearHistory

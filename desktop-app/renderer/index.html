@@ -93,6 +93,10 @@
         <input type="checkbox" id="includeContext" style="width: 14px; height: 14px; cursor: pointer;">
         <label for="includeContext" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Include recent history as context (experimental)</label>
       </div>
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+        <input type="checkbox" id="autoStart" style="width: 14px; height: 14px; cursor: pointer;">
+        <label for="autoStart" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Start Fix Errors AI with Windows (minimized to tray)</label>
+      </div>
       <div class="form-group">
         <label for="globalHotkey">Global show/hide hotkey</label>
         <input type="text" id="globalHotkey" placeholder="Control+Shift+F" />
@@ -118,6 +122,15 @@
           This works by simulating Ctrl+C / Ctrl+V, so it inherits a couple of OS quirks:
           in terminal apps Ctrl+C often means "interrupt" instead of "copy," and apps running
           as Administrator will silently ignore the simulated keys unless this app also runs elevated.
+        </p>
+      </div>
+
+      <h3>Keyboard Layout (local)</h3>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="translitHotkey">Keyboard layout hotkey</label>
+        <input type="text" id="translitHotkey" placeholder="Shift+Alt+L" />
+        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
+          Select text in any Windows app and press this hotkey to switch text between the Ukrainian and English keyboard layouts locally — no AI request is made. Leave blank to disable.
         </p>
       </div>
 
@@ -151,7 +164,10 @@
     <!-- Prompts View -->
     <div id="prompts-view" class="view-container">
       <h3>System Prompts</h3>
-      <p style="font-size: 10px; color: #666; margin-bottom: 15px;">Customize how the AI behaves for each action.</p>
+      <p style="font-size: 10px; color: #666; margin-bottom: 15px;">
+        Customize how the AI behaves for each action. Add an optional global shortcut in the field on the right;
+        leave it blank to disable. Shortcuts run on selected text in any Windows app. Reply Assist opens Compose so you can add conversation context before generating.
+      </p>
       <div id="prompts-list"></div>
       <div class="flex-row">
         <button id="save-prompts-btn" class="action-btn primary-action">Save Prompts</button>

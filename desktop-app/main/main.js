@@ -2,7 +2,7 @@ const { app, BrowserWindow, Tray, Menu, globalShortcut } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const store = require('./store');
-const { runQuickFix } = require('./quick-fix');
+const { runQuickFix, runReplyAssist: captureReplyAssist } = require('./quick-fix');
 
 // This is a small compose/utility window, not a graphics app — trading GPU
 // compositing for software rendering avoids a real-world crash where a flaky
@@ -16,6 +16,7 @@ const ICON_PATH = path.join(__dirname, '..', 'build', 'icon.ico');
 
 let mainWindow = null;
 let tray = null;
+let startedFromLogin = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -23,6 +24,7 @@ function createWindow() {
     height: 720,
     minWidth: 720,
     minHeight: 560,
+    show: !startedFromLogin,
     title: 'Fix Errors AI',
     icon: ICON_PATH,
     webPreferences: {
@@ -43,6 +45,23 @@ function createWindow() {
   });
 }
 
+function applyAutoStart(enabled) {
+  if (process.platform !== 'win32') return true;
+
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: Boolean(enabled),
+      openAsHidden: true,
+      args: ['--hidden'],
+      name: 'Fix Errors AI'
+    });
+    return true;
+  } catch (error) {
+    console.warn('Failed to update Windows startup setting:', error.message);
+    return false;
+  }
+}
+
 function showWindow() {
   if (!mainWindow) {
     createWindow();
@@ -51,6 +70,25 @@ function showWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+}
+
+function sendReplyAssistRequest(selectedText) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const send = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('openReplyAssist', { selectedText });
+  };
+
+  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', send);
+  else send();
+}
+
+async function startReplyAssist() {
+  const selectedText = await captureReplyAssist();
+  if (!selectedText) return;
+  showWindow();
+  sendReplyAssistRequest(selectedText);
 }
 
 function toggleWindow() {
@@ -83,23 +121,49 @@ function safeRegister(accelerator, callback) {
   }
 }
 
-// Both hotkeys are re-registered together (globalShortcut has no per-key
+function acceleratorKey(accelerator) {
+  return accelerator.trim().replace(/\s+/g, '').toLowerCase();
+}
+
+function registerUnique(accelerator, callback, registeredAccelerators) {
+  const trimmed = (accelerator || '').trim();
+  if (!trimmed) return true;
+
+  const key = acceleratorKey(trimmed);
+  if (registeredAccelerators.has(key)) return false;
+
+  const ok = safeRegister(trimmed, callback);
+  if (ok) registeredAccelerators.add(key);
+  return ok;
+}
+
+// All hotkeys are re-registered together (globalShortcut has no per-key
 // update, only register/unregisterAll) whenever settings are saved.
-function applyHotkeys({ globalHotkey, quickFixHotkey }) {
+function applyHotkeys({ globalHotkey, quickFixHotkey, translitHotkey, quickFixAction, promptHotkeys = {} }) {
   globalShortcut.unregisterAll();
+  const registeredAccelerators = new Set();
 
-  const toggleOk = globalHotkey ? safeRegister(globalHotkey, toggleWindow) : true;
+  const toggleOk = registerUnique(globalHotkey, toggleWindow, registeredAccelerators);
 
-  let quickFixOk = true;
-  if (quickFixHotkey) {
-    quickFixOk = quickFixHotkey === globalHotkey ? false : safeRegister(quickFixHotkey, runQuickFix);
-  }
+  const quickFixCallback = quickFixAction === 'replyAssist' ? startReplyAssist : () => runQuickFix();
+  const quickFixOk = registerUnique(quickFixHotkey, quickFixCallback, registeredAccelerators);
 
-  return { toggleOk, quickFixOk };
+  const translitOk = registerUnique(translitHotkey, () => runQuickFix('translit'), registeredAccelerators);
+
+  const promptHotkeyOk = {};
+  Object.entries(promptHotkeys || {}).forEach(([action, accelerator]) => {
+    const callback = action === 'replyAssist' ? startReplyAssist : () => runQuickFix(action);
+    promptHotkeyOk[action] = registerUnique(accelerator, callback, registeredAccelerators);
+  });
+
+  return { toggleOk, quickFixOk, translitOk, promptHotkeyOk };
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers({ onHotkeyChange: applyHotkeys });
+  const loginItemSettings = process.platform === 'win32' ? app.getLoginItemSettings() : {};
+  startedFromLogin = process.platform === 'win32' && (loginItemSettings.wasOpenedAtLogin || process.argv.includes('--hidden'));
+  applyAutoStart(store.getSettings().autoStart);
+  registerIpcHandlers({ onHotkeyChange: applyHotkeys, onAutoStartChange: applyAutoStart });
   createWindow();
   createTray();
   applyHotkeys(store.getSettings());

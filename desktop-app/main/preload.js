@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('api', {
   clearHistory: () => ipcRenderer.invoke('clearHistory'),
 
   getPrompts: () => ipcRenderer.invoke('getPrompts'),
-  savePrompts: (prompts) => ipcRenderer.invoke('savePrompts', prompts),
-  resetPrompts: () => ipcRenderer.invoke('resetPrompts')
+  resetPrompts: () => ipcRenderer.invoke('resetPrompts'),
+
+  getPromptHotkeys: () => ipcRenderer.invoke('getPromptHotkeys'),
+  savePrompts: (prompts, promptHotkeys) => ipcRenderer.invoke('savePrompts', prompts, promptHotkeys),
+  onReplyAssist: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('openReplyAssist', listener);
+    return () => ipcRenderer.removeListener('openReplyAssist', listener);
+  }
 });

@@ -119,7 +119,7 @@ async function retryWithModel(originalText, action, context, model) {
   }
 }
 
-function registerIpcHandlers({ onHotkeyChange } = {}) {
+function registerIpcHandlers({ onHotkeyChange, onAutoStartChange } = {}) {
   ipcMain.handle('runAction', (event, text, action, context) => runAction(text, action, context));
 
   ipcMain.handle('cancelRun', () => {
@@ -135,17 +135,40 @@ function registerIpcHandlers({ onHotkeyChange } = {}) {
   ipcMain.handle('getSettings', () => store.getSettings());
   ipcMain.handle('saveSettings', (event, settings) => {
     store.saveSettings(settings);
-    const { toggleOk, quickFixOk } = onHotkeyChange
+    const { toggleOk, quickFixOk, translitOk, promptHotkeyOk } = onHotkeyChange
       ? onHotkeyChange(settings)
-      : { toggleOk: true, quickFixOk: true };
-    return { ok: true, hotkeyOk: toggleOk, quickFixHotkeyOk: quickFixOk };
+      : { toggleOk: true, quickFixOk: true, translitOk: true, promptHotkeyOk: {} };
+    const autoStartOk = onAutoStartChange ? onAutoStartChange(settings.autoStart) : true;
+    return {
+      ok: true,
+      hotkeyOk: toggleOk,
+      quickFixHotkeyOk: quickFixOk,
+      translitHotkeyOk: translitOk,
+      promptHotkeyOk,
+      autoStartOk
+    };
   });
 
   ipcMain.handle('getHistory', () => store.getHistory());
   ipcMain.handle('clearHistory', () => { store.clearHistory(); return { ok: true }; });
 
   ipcMain.handle('getPrompts', () => store.getPrompts());
-  ipcMain.handle('savePrompts', (event, prompts) => { store.savePrompts(prompts); return { ok: true }; });
+  ipcMain.handle('getPromptHotkeys', () => store.getPromptHotkeys());
+  ipcMain.handle('savePrompts', (event, prompts, promptHotkeys) => {
+    store.savePrompts(prompts);
+    if (promptHotkeys !== undefined) store.savePromptHotkeys(promptHotkeys);
+
+    const hotkeyResult = onHotkeyChange
+      ? onHotkeyChange(store.getSettings())
+      : { toggleOk: true, quickFixOk: true, translitOk: true, promptHotkeyOk: {} };
+    return {
+      ok: true,
+      hotkeyOk: hotkeyResult.toggleOk,
+      quickFixHotkeyOk: hotkeyResult.quickFixOk,
+      translitHotkeyOk: hotkeyResult.translitOk,
+      promptHotkeyOk: hotkeyResult.promptHotkeyOk
+    };
+  });
   ipcMain.handle('resetPrompts', () => { store.resetPrompts(); return { ok: true }; });
 }
 
