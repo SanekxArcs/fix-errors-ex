@@ -6,174 +6,152 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="header">
-      <img src="Logo-Luigis-Box-16.png" alt="Logo">
-      <h2>Fix Errors AI</h2>
+    <div class="app-header">
+      <div class="brand-lockup">
+        <div class="brand-mark"><img src="Logo-Luigis-Box-16.png" alt=""></div>
+        <div>
+          <h1>Fix Errors AI</h1>
+          <p>Private writing tools</p>
+        </div>
+      </div>
+      <div class="status-pill"><span></span> Desktop app</div>
     </div>
 
-    <div class="nav-buttons">
-      <button id="view-compose-btn" class="primary">Compose</button>
-      <button id="view-settings-btn">Settings</button>
-      <button id="view-history-btn">History</button>
-      <button id="view-prompts-btn">Prompts</button>
+    <div class="nav-buttons app-tabs" role="tablist" aria-label="Main navigation">
+      <button id="view-compose-btn" class="primary" role="tab">Compose</button>
+      <button id="view-settings-btn" role="tab">Settings</button>
+      <button id="view-history-btn" role="tab">History</button>
+      <button id="view-prompts-btn" role="tab">Prompts</button>
     </div>
 
-    <!-- Compose View -->
-    <div id="compose-view" class="view-container active">
-      <div class="compose-toolbar">
-        <select id="actionSelect"></select>
-        <button id="run-btn" class="action-btn primary-action">Run</button>
-        <button id="cancel-btn" class="action-btn" style="display:none;">Cancel</button>
-      </div>
-
-      <div id="context-field">
-        <label for="contextInput">Context (optional, used by Reply Assist)</label>
-        <textarea id="contextInput" placeholder="Paste conversation, describe tone, or add instructions…"></textarea>
-      </div>
-
-      <div class="compose-grid">
-        <div class="compose-pane">
-          <label for="inputText">Original text</label>
-          <textarea id="inputText" placeholder="Paste or type text here…"></textarea>
+    <main class="app-main">
+      <!-- Compose View -->
+      <div id="compose-view" class="view-container active">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">WORKSPACE</p>
+            <h2>Compose and refine</h2>
+            <p class="page-description">Choose an action, then turn rough text into something ready to send.</p>
+          </div>
         </div>
-        <div class="compose-pane">
-          <label for="outputText">Result</label>
-          <textarea id="outputText" placeholder="Result will appear here…" readonly></textarea>
+
+        <div class="compose-toolbar surface-card">
+          <div class="toolbar-field">
+            <label for="actionSelect">Action</label>
+            <select id="actionSelect"></select>
+          </div>
+          <div class="toolbar-actions">
+            <button id="run-btn" class="action-btn primary-action">Run action</button>
+            <button id="cancel-btn" class="action-btn" style="display:none;">Cancel</button>
+          </div>
         </div>
-      </div>
 
-      <div id="model-picker">
-        <div class="picker-header">Retry with model:</div>
-        <div id="model-picker-list"></div>
-      </div>
-
-      <div class="flex-row">
-        <button id="copy-result-btn" class="action-btn">Copy Result</button>
-      </div>
-    </div>
-
-    <!-- Settings View -->
-    <div id="settings-view" class="view-container">
-      <h3>AI Provider</h3>
-      <div class="form-group">
-        <select id="providerSelect">
-          <option value="gemini">Google Gemini</option>
-          <option value="lmstudio">LM Studio (Local)</option>
-        </select>
-      </div>
-
-      <div id="gemini-section" class="provider-section">
-        <div class="form-group">
-          <label for="apiKey">Gemini API Key</label>
-          <input type="password" id="apiKey" placeholder="Paste your API key here" />
+        <div id="context-field" class="surface-card">
+          <label for="contextInput">Context <span class="label-muted">Optional · used by Reply Assist</span></label>
+          <textarea id="contextInput" placeholder="Paste conversation, describe tone, or add instructions…"></textarea>
         </div>
-        <div class="form-group">
-          <label for="modelSelect">Primary Model</label>
-          <select id="modelSelect"></select>
+
+        <div class="compose-grid">
+          <div class="compose-pane surface-card">
+            <div class="pane-heading"><label for="inputText">Original text</label><span>INPUT</span></div>
+            <textarea id="inputText" placeholder="Paste or type text here…"></textarea>
+          </div>
+          <div class="compose-pane surface-card result-pane">
+            <div class="pane-heading"><label for="outputText">Result</label><span>OUTPUT</span></div>
+            <textarea id="outputText" placeholder="Your refined text will appear here…" readonly></textarea>
+          </div>
         </div>
-        <div class="form-group" style="margin-bottom: 0;">
-          <label for="fallbackModelSelect">Fallback Model (Optional)</label>
-          <select id="fallbackModelSelect"></select>
+
+        <div id="model-picker">
+          <div class="picker-header">Retry with model</div>
+          <div id="model-picker-list"></div>
+        </div>
+
+        <div class="flex-row compose-footer">
+          <span class="footer-hint">Your text stays local unless you choose Gemini.</span>
+          <button id="copy-result-btn" class="action-btn">Copy result</button>
         </div>
       </div>
 
-      <div id="lmstudio-section" class="provider-section" style="display: none;">
-        <div class="form-group">
-          <label for="lmStudioUrl">Server URL</label>
-          <input type="text" id="lmStudioUrl" placeholder="http://localhost:1234" />
+      <!-- Settings View -->
+      <div id="settings-view" class="view-container">
+        <div class="page-heading">
+          <p class="eyebrow">PREFERENCES</p>
+          <h2>Settings</h2>
+          <p class="page-description">Control your provider, shortcuts, and Windows behavior.</p>
         </div>
-        <div class="form-group" style="margin-bottom: 0;">
-          <label for="lmStudioModel">Model Identifier</label>
-          <input type="text" id="lmStudioModel" placeholder="e.g. qwen2.5-7b-instruct" />
+        <section class="settings-card">
+          <div class="section-heading"><div><h3>AI provider</h3><p>Choose where text processing happens.</p></div><span class="section-icon">✦</span></div>
+          <div class="form-group">
+            <label for="providerSelect">Provider</label>
+            <select id="providerSelect">
+              <option value="gemini">Google Gemini</option>
+              <option value="lmstudio">LM Studio (Local)</option>
+            </select>
+          </div>
+
+          <div id="gemini-section" class="provider-section">
+            <div class="form-group">
+              <label for="apiKey">Gemini API key</label>
+              <input type="password" id="apiKey" placeholder="Paste your API key here" />
+            </div>
+            <div class="form-grid">
+              <div class="form-group"><label for="modelSelect">Primary model</label><select id="modelSelect"></select></div>
+              <div class="form-group"><label for="fallbackModelSelect">Fallback model <span class="label-muted">Optional</span></label><select id="fallbackModelSelect"></select></div>
+            </div>
+          </div>
+
+          <div id="lmstudio-section" class="provider-section" style="display: none;">
+            <div class="form-grid">
+              <div class="form-group"><label for="lmStudioUrl">Server URL</label><input type="text" id="lmStudioUrl" placeholder="http://localhost:1234" /></div>
+              <div class="form-group"><label for="lmStudioModel">Model identifier</label><input type="text" id="lmStudioModel" placeholder="e.g. qwen2.5-7b-instruct" /></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="section-heading"><div><h3>General</h3><p>Make Fix Errors AI fit your daily workflow.</p></div><span class="section-icon">⚙</span></div>
+          <label class="check-row" for="includeContext"><input type="checkbox" id="includeContext"><span><strong>Include recent history as context</strong><small>Experimental · gives the model more continuity.</small></span></label>
+          <label class="check-row" for="autoStart"><input type="checkbox" id="autoStart"><span><strong>Start with Windows</strong><small>Launch minimized to the system tray.</small></span></label>
+          <div class="form-group"><label for="globalHotkey">Show / hide shortcut</label><input type="text" id="globalHotkey" placeholder="Control+Shift+F" /><p>Brings the app to the front from anywhere. Leave blank to disable.</p></div>
+        </section>
+
+        <section class="settings-card">
+          <div class="section-heading"><div><h3>System-wide actions</h3><p>Run on selected text in another Windows app.</p></div><span class="section-icon">⌘</span></div>
+          <div class="form-grid">
+            <div class="form-group"><label for="quickFixHotkey">Quick Fix shortcut</label><input type="text" id="quickFixHotkey" placeholder="Shift+Alt+G" /></div>
+            <div class="form-group"><label for="quickFixAction">Quick Fix action</label><select id="quickFixAction"></select></div>
+          </div>
+          <p>Select text, press the shortcut, and the result is pasted back in place. It must differ from other shortcuts. Leave blank to disable.</p>
+          <div class="callout">Keyboard Layout is local and does not call AI. For apps running as Administrator, run this app at the same privilege level.</div>
+          <div class="form-grid">
+            <div class="form-group"><label for="translitHotkey">Keyboard layout shortcut</label><input type="text" id="translitHotkey" placeholder="Shift+Alt+L" /></div>
+          </div>
+        </section>
+        <button id="save-btn" class="action-btn primary-action save-button">Save settings</button>
+      </div>
+
+      <!-- History View -->
+      <div id="history-view" class="view-container">
+        <div class="page-heading"><p class="eyebrow">ACTIVITY</p><h2>History</h2><p class="page-description">A private record of your recent text edits.</p></div>
+        <div id="history-stats">
+          <div class="stat-box"><span id="stat-count" class="stat-value">0</span><span class="stat-label">Corrected</span></div>
+          <div class="stat-box"><span id="stat-time" class="stat-value">0s</span><span class="stat-label">Total time</span></div>
+          <div class="stat-box"><span id="stat-tokens" class="stat-value">0</span><span class="stat-label">Tokens used</span></div>
         </div>
+        <div class="section-heading history-heading"><div><h3>Recent edits</h3><p>Last 50 processed items.</p></div></div>
+        <div id="history-list"></div>
+        <div class="flex-row"><button id="clear-history-btn" class="action-btn danger">Clear history</button></div>
       </div>
 
-      <h3>General</h3>
-      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-        <input type="checkbox" id="includeContext" style="width: 14px; height: 14px; cursor: pointer;">
-        <label for="includeContext" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Include recent history as context (experimental)</label>
+      <!-- Prompts View -->
+      <div id="prompts-view" class="view-container">
+        <div class="page-heading"><p class="eyebrow">AUTOMATION</p><h2>Prompts</h2><p class="page-description">Tune each action and optionally give it a global shortcut.</p></div>
+        <div class="callout">Leave shortcut fields empty to disable them. Shortcuts run on selected text in any Windows app. Reply Assist opens Compose so you can add conversation context before generating.</div>
+        <div id="prompts-list"></div>
+        <div class="flex-row"><button id="save-prompts-btn" class="action-btn primary-action">Save prompts</button><button id="reset-prompts-btn" class="action-btn">Reset defaults</button></div>
       </div>
-      <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-        <input type="checkbox" id="autoStart" style="width: 14px; height: 14px; cursor: pointer;">
-        <label for="autoStart" style="margin-bottom: 0; color: #aaa; cursor: pointer;">Start Fix Errors AI with Windows (minimized to tray)</label>
-      </div>
-      <div class="form-group">
-        <label for="globalHotkey">Global show/hide hotkey</label>
-        <input type="text" id="globalHotkey" placeholder="Control+Shift+F" />
-        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
-          Brings the app to the front from anywhere, even minimized to tray. Leave blank to disable.
-          Uses Electron accelerator format, e.g. <code>Control+Shift+F</code> or <code>Alt+Space</code>.
-        </p>
-      </div>
-
-      <h3>Quick Fix (system-wide)</h3>
-      <div class="form-group">
-        <label for="quickFixHotkey">Quick Fix hotkey</label>
-        <input type="text" id="quickFixHotkey" placeholder="Shift+Alt+G" />
-      </div>
-      <div class="form-group" style="margin-bottom: 0;">
-        <label for="quickFixAction">Action to run</label>
-        <select id="quickFixAction"></select>
-        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
-          Select text in <em>any</em> Windows app (VS Code, a chat app, Explorer's rename box, etc.),
-          press this hotkey, and the selection is copied, sent to the AI, and pasted back in place —
-          without opening this app's window. Must be different from the show/hide hotkey above. Leave blank to disable.
-          <br><br>
-          This works by simulating Ctrl+C / Ctrl+V, so it inherits a couple of OS quirks:
-          in terminal apps Ctrl+C often means "interrupt" instead of "copy," and apps running
-          as Administrator will silently ignore the simulated keys unless this app also runs elevated.
-        </p>
-      </div>
-
-      <h3>Keyboard Layout (local)</h3>
-      <div class="form-group" style="margin-bottom: 0;">
-        <label for="translitHotkey">Keyboard layout hotkey</label>
-        <input type="text" id="translitHotkey" placeholder="Shift+Alt+L" />
-        <p style="font-size: 10px; color: #666; margin: 4px 0 0;">
-          Select text in any Windows app and press this hotkey to switch text between the Ukrainian and English keyboard layouts locally — no AI request is made. Leave blank to disable.
-        </p>
-      </div>
-
-      <button id="save-btn" class="action-btn primary-action">Save Settings</button>
-    </div>
-
-    <!-- History View -->
-    <div id="history-view" class="view-container">
-      <h3>All-Time Stats</h3>
-      <div id="history-stats">
-        <div class="stat-box">
-          <span id="stat-count" class="stat-value">0</span>
-          <span class="stat-label">Corrected</span>
-        </div>
-        <div class="stat-box">
-          <span id="stat-time" class="stat-value">0s</span>
-          <span class="stat-label">Total Time</span>
-        </div>
-        <div class="stat-box">
-          <span id="stat-tokens" class="stat-value">0</span>
-          <span class="stat-label">Tokens Used</span>
-        </div>
-      </div>
-      <h3>Recent Edits (last 50)</h3>
-      <div id="history-list"></div>
-      <div class="flex-row">
-        <button id="clear-history-btn" class="action-btn danger">Clear History</button>
-      </div>
-    </div>
-
-    <!-- Prompts View -->
-    <div id="prompts-view" class="view-container">
-      <h3>System Prompts</h3>
-      <p style="font-size: 10px; color: #666; margin-bottom: 15px;">
-        Customize how the AI behaves for each action. Add an optional global shortcut in the field on the right;
-        leave it blank to disable. Shortcuts run on selected text in any Windows app. Reply Assist opens Compose so you can add conversation context before generating.
-      </p>
-      <div id="prompts-list"></div>
-      <div class="flex-row">
-        <button id="save-prompts-btn" class="action-btn primary-action">Save Prompts</button>
-        <button id="reset-prompts-btn" class="action-btn">Reset Defaults</button>
-      </div>
-    </div>
+    </main>
 
     <div id="app-toast"></div>
 
