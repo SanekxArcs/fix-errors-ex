@@ -48,34 +48,58 @@ const ACTION_LABELS = {
   aiPrompt:          "AI Prompt (custom)"
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+// Flash-Lite is the sweet spot for short rewrites: fast, cheap, and more than
+// capable enough for grammar and tone work.
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 const DEFAULT_LM_STUDIO_URL = "http://192.168.1.114:1234";
 
+// Mirrors ai.google.dev/gemini-api/docs/models (checked 2026-09-13), ordered
+// with the recommended default first, then newest to oldest.
 const GEMINI_MODELS = [
   {
     id: "gemini-3.5-flash-lite",
-    label: "Gemini 3.5 Flash-Lite (fast / high throughput)"
+    label: "Gemini 3.5 Flash-Lite (recommended)"
+  },
+  {
+    id: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash (most capable)"
+  },
+  {
+    id: "gemini-3.7-flash",
+    label: "Gemini 3.7 Flash"
+  },
+  {
+    id: "gemini-3.6-flash",
+    label: "Gemini 3.6 Flash"
+  },
+  {
+    id: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash"
   },
   {
     id: "gemini-3.1-flash-lite",
     label: "Gemini 3.1 Flash-Lite"
   },
   {
+    id: "gemini-3.1-pro-preview",
+    label: "Gemini 3.1 Pro (preview)"
+  },
+  {
     id: "gemini-3-flash-preview",
-    label: "gemini-3-flash-preview"
+    label: "Gemini 3 Flash (preview)"
   },
   {
     id: "gemini-2.5-pro",
-    label: "gemini-2.5-pro"
+    label: "Gemini 2.5 Pro (legacy)"
   },
   {
     id: "gemini-2.5-flash",
-    label: "gemini-2.5-flash"
+    label: "Gemini 2.5 Flash (legacy)"
   },
   {
     id: "gemini-2.5-flash-lite",
-    label: "gemini-2.5-flash-lite"
+    label: "Gemini 2.5 Flash-Lite (legacy)"
   }
 ];
 

@@ -28,6 +28,10 @@ directly on a Windows machine.
 
 ## Notes
 
+- Settings and prompts save automatically as you edit them — there are no Save
+  buttons. Hotkey fields commit when you leave the field (or press Enter), so a
+  half-typed accelerator is never registered.
+- The window follows your Windows light/dark theme.
 - Settings/history/prompts are stored locally via `electron-store` in the
   per-user Electron app-data folder — no cloud sync, same as the extension's
   `chrome.storage.local`.

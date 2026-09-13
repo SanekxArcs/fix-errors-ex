@@ -1,3 +1,33 @@
+// Inline lucide icons (shadcn's icon set) so the popup stays dependency-free.
+const ICONS = {
+  eye: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`,
+  eyeOff: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`,
+  copy: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
+  check: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`
+};
+
+// Settings and prompts autosave, so text fields settle briefly before writing
+// while dropdowns and toggles commit immediately.
+const SAVE_DEBOUNCE_MS = 400;
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+// Stands in for the old explicit Save buttons. It lives in the header so the
+// confirmation is visible even when the panel below is scrolled.
+function flashSaved() {
+  const el = document.getElementById("save-indicator");
+  el.innerHTML = ICONS.check + "<span>Saved</span>";
+  el.hidden = false;
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.hidden = true; }, 1800);
+}
+
 function showPopupToast(message, type = "success", duration = 3000) {
   const toast = document.getElementById("popup-toast");
   toast.textContent = message;
@@ -9,6 +39,9 @@ function showPopupToast(message, type = "success", duration = 3000) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  document.getElementById("app-version").textContent =
+    "v" + chrome.runtime.getManifest().version;
+
   const settingsBtn = document.getElementById("view-settings-btn");
   const historyBtn = document.getElementById("view-history-btn");
   const shortcutsBtn = document.getElementById("view-shortcuts-btn");
@@ -27,18 +60,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const lmStudioModelInput = document.getElementById("lmStudioModel");
   const autoSelectAllCheckbox = document.getElementById("autoSelectAll");
   const includeContextCheckbox = document.getElementById("includeContext");
-  const saveBtn = document.getElementById("save-btn");
+  const apiKeyWarning = document.getElementById("api-key-warning");
   const historyList = document.getElementById("history-list");
   const clearHistoryBtn = document.getElementById("clear-history-btn");
 
   function applyProviderUI(provider) {
-    if (provider === "lmstudio") {
-      geminiSection.style.display = "none";
-      lmstudioSection.style.display = "block";
-    } else {
-      geminiSection.style.display = "block";
-      lmstudioSection.style.display = "none";
-    }
+    const useLmStudio = provider === "lmstudio";
+    geminiSection.hidden = useLmStudio;
+    lmstudioSection.hidden = !useLmStudio;
   }
 
   providerSelect.addEventListener("change", () => applyProviderUI(providerSelect.value));
@@ -95,11 +124,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   lmStudioUrlInput.value = lmStudioUrl || DEFAULT_LM_STUDIO_URL;
   lmStudioModelInput.value = lmStudioModel || "";
 
+  // Tabs follow the shadcn/Radix convention: the active panel and trigger carry
+  // data-state="active"; the stylesheet keys off that attribute.
   function switchView(activeView, activeBtn) {
-    [settingsView, historyView, shortcutsView, promptsView].forEach(v => v.classList.remove("active"));
-    [settingsBtn, historyBtn, shortcutsBtn, promptsBtn].forEach(b => b.classList.remove("primary"));
-    activeView.classList.add("active");
-    activeBtn.classList.add("primary");
+    [settingsView, historyView, shortcutsView, promptsView].forEach(v => {
+      v.removeAttribute("data-state");
+    });
+    [settingsBtn, historyBtn, shortcutsBtn, promptsBtn].forEach(b => {
+      b.removeAttribute("data-state");
+      b.removeAttribute("aria-selected");
+    });
+    activeView.setAttribute("data-state", "active");
+    activeBtn.setAttribute("data-state", "active");
+    activeBtn.setAttribute("aria-selected", "true");
   }
 
   // Switch between views
@@ -131,13 +168,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       item.className = "prompt-item";
 
       const lbl = document.createElement("label");
+      lbl.className = "label";
       lbl.setAttribute("for", `prompt-${id}`);
       lbl.textContent = label;
 
       const ta = document.createElement("textarea");
       ta.id = `prompt-${id}`;
+      ta.className = "textarea";
       ta.rows = 4;
       ta.value = customPrompts[id] || DEFAULT_PROMPTS[id] || "";
+      ta.addEventListener("input", savePromptsDebounced);
 
       item.appendChild(lbl);
       item.appendChild(ta);
@@ -145,23 +185,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  document.getElementById("save-prompts-btn").addEventListener("click", async () => {
+  async function savePrompts() {
     const saved = {};
     Object.keys(ACTION_LABELS).forEach(id => {
       const ta = document.getElementById(`prompt-${id}`);
       if (ta) saved[id] = ta.value.trim();
     });
     await chrome.storage.local.set({ customPrompts: saved });
-    const btn = document.getElementById("save-prompts-btn");
-    const original = btn.textContent;
-    btn.textContent = "Saved!";
-    setTimeout(() => { btn.textContent = original; }, 1500);
-  });
+    flashSaved();
+  }
+
+  const savePromptsDebounced = debounce(savePrompts, SAVE_DEBOUNCE_MS);
 
   document.getElementById("reset-prompts-btn").addEventListener("click", async () => {
     if (!confirm("Reset all prompts to defaults? Your custom prompts will be lost.")) return;
     await chrome.storage.local.remove("customPrompts");
-    loadPrompts();
+    await loadPrompts();
+    flashSaved();
   });
 
   // Toggle API Key visibility
@@ -169,7 +209,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   toggleApiKeyBtn.addEventListener("click", () => {
     const isHidden = apiKeyInput.type === "password";
     apiKeyInput.type = isHidden ? "text" : "password";
-    toggleApiKeyBtn.textContent = isHidden ? "🙈" : "👁";
+    toggleApiKeyBtn.innerHTML = isHidden ? ICONS.eyeOff : ICONS.eye;
+    const label = isHidden ? "Hide API key" : "Show API key";
+    toggleApiKeyBtn.title = label;
+    toggleApiKeyBtn.setAttribute("aria-label", label);
   });
 
   // Copy API Key
@@ -182,42 +225,52 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     try {
       await navigator.clipboard.writeText(key);
-      copyApiKeyBtn.classList.add("success");
-      setTimeout(() => copyApiKeyBtn.classList.remove("success"), 1500);
+      copyApiKeyBtn.classList.add("is-success");
+      copyApiKeyBtn.innerHTML = ICONS.check;
+      setTimeout(() => {
+        copyApiKeyBtn.classList.remove("is-success");
+        copyApiKeyBtn.innerHTML = ICONS.copy;
+      }, 1500);
       showPopupToast("API key copied!", "success");
-    } catch (err) {
+    } catch {
       showPopupToast("Failed to copy API key.", "error");
     }
   });
 
-  // Save API Key
-  saveBtn.addEventListener("click", async () => {
-    const provider = providerSelect.value;
-    const key = apiKeyInput.value.trim();
-    const selectedModel = modelSelect.value || DEFAULT_GEMINI_MODEL;
-    const selectedFallbackModel = fallbackModelSelect.value;
-    const autoSelectAll = autoSelectAllCheckbox.checked;
-    const includeContext = includeContextCheckbox.checked;
-    const lmUrl = lmStudioUrlInput.value.trim() || DEFAULT_LM_STUDIO_URL;
-    const lmModel = lmStudioModelInput.value.trim();
+  // Settings autosave. There's no Save button to gate on a missing API key, so
+  // the field flags it inline instead of blocking the write.
+  function updateApiKeyWarning() {
+    apiKeyWarning.hidden =
+      providerSelect.value !== "gemini" || !!apiKeyInput.value.trim();
+  }
 
-    if (provider === "gemini" && !key) {
-      showPopupToast("Please enter a valid Gemini API Key.", "error");
-      return;
-    }
-
+  async function saveSettings() {
     await chrome.storage.local.set({
-      aiProvider: provider,
-      geminiApiKey: key,
-      geminiModel: selectedModel,
-      geminiFallbackModel: selectedFallbackModel,
-      autoSelectAll: autoSelectAll,
-      includeContext: includeContext,
-      lmStudioUrl: lmUrl,
-      lmStudioModel: lmModel
+      aiProvider: providerSelect.value,
+      geminiApiKey: apiKeyInput.value.trim(),
+      geminiModel: modelSelect.value || DEFAULT_GEMINI_MODEL,
+      geminiFallbackModel: fallbackModelSelect.value,
+      autoSelectAll: autoSelectAllCheckbox.checked,
+      includeContext: includeContextCheckbox.checked,
+      lmStudioUrl: lmStudioUrlInput.value.trim() || DEFAULT_LM_STUDIO_URL,
+      lmStudioModel: lmStudioModelInput.value.trim()
     });
-    showPopupToast("Settings saved!", "success");
+    updateApiKeyWarning();
+    flashSaved();
+  }
+
+  const saveSettingsDebounced = debounce(saveSettings, SAVE_DEBOUNCE_MS);
+
+  [providerSelect, modelSelect, fallbackModelSelect, autoSelectAllCheckbox, includeContextCheckbox]
+    .forEach(el => {
+      el.addEventListener("change", saveSettings);
+    });
+
+  [apiKeyInput, lmStudioUrlInput, lmStudioModelInput].forEach(el => {
+    el.addEventListener("input", saveSettingsDebounced);
   });
+
+  updateApiKeyWarning();
 
   // Clear History — fold the cleared entries into lifetimeStats first so the
   // all-time totals never lose data just because the detail view was wiped.
@@ -285,7 +338,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateHistoryStats(history, lifetimeStats);
 
     if (history.length === 0) {
-      historyList.innerHTML = '<div class="empty-state">No history yet. Fix some text on any page!</div>';
+      historyList.innerHTML =
+        '<div class="empty-state">' +
+        '<strong>No edits yet</strong>' +
+        '<span>Select text on any page and run an AI action to see it here.</span>' +
+        '</div>';
       return;
     }
 
@@ -302,7 +359,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       fixedText.textContent = item.fixed;
 
       const timestamp = document.createElement("span");
-      timestamp.className = "history-timestamp";
+      timestamp.className = "history-meta";
       const actionLabel = ACTION_LABELS[item.action] || "Fix spelling & grammar";
       let meta = new Date(item.timestamp).toLocaleString() + " • " + actionLabel;
       if (item.responseTimeMs != null) {
@@ -320,15 +377,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       actions.className = "history-actions";
 
       const copyBtn = document.createElement("button");
-      copyBtn.className = "copy-btn";
-      copyBtn.textContent = "Copy Result";
+      copyBtn.type = "button";
+      copyBtn.className = "btn btn-outline btn-sm";
+      copyBtn.innerHTML = ICONS.copy + "<span>Copy result</span>";
       copyBtn.onclick = () => {
         navigator.clipboard.writeText(item.fixed).then(() => {
-          copyBtn.textContent = "Copied!";
-          copyBtn.classList.add("success");
+          copyBtn.innerHTML = ICONS.check + "<span>Copied</span>";
+          copyBtn.classList.add("is-success");
           setTimeout(() => {
-            copyBtn.textContent = "Copy Result";
-            copyBtn.classList.remove("success");
+            copyBtn.innerHTML = ICONS.copy + "<span>Copy result</span>";
+            copyBtn.classList.remove("is-success");
           }, 2000);
         });
       };

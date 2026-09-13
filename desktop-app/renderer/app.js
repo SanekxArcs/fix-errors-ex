@@ -1,3 +1,39 @@
+// ─── Design system helpers ──────────────────────────────────────────────────
+
+// Inline lucide icons (shadcn's icon set) so the renderer stays dependency-free.
+const ICONS = {
+  check: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`,
+  alert: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`,
+  info: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`,
+  spinner: `<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+  rotate: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1.06 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`,
+  copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`
+};
+
+// Settings and prompts autosave, so text fields settle briefly before writing
+// while dropdowns and toggles commit immediately. Hotkey fields save on change
+// (blur/Enter) rather than per keystroke — a half-typed accelerator like
+// "Shift+Al" would fail to register.
+const SAVE_DEBOUNCE_MS = 400;
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+// Stands in for the old explicit Save buttons. It lives in the header so the
+// confirmation is visible even when the panel below is scrolled.
+function flashSaved() {
+  const el = document.getElementById("save-indicator");
+  el.innerHTML = ICONS.check + "<span>Saved</span>";
+  el.hidden = false;
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.hidden = true; }, 1800);
+}
+
 // ─── Toast ──────────────────────────────────────────────────────────────────
 
 function showToast(message, type = "info", options = {}) {
@@ -5,12 +41,20 @@ function showToast(message, type = "info", options = {}) {
   toast.innerHTML = "";
   toast.className = "show " + type;
 
+  const icons = { working: ICONS.spinner, success: ICONS.check, error: ICONS.alert, info: ICONS.info };
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.innerHTML = icons[type] || icons.info;
+  toast.appendChild(icon);
+
   const textSpan = document.createElement("span");
   textSpan.textContent = message;
   toast.appendChild(textSpan);
 
   if (type === "working") {
     const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-ghost btn-sm";
     cancelBtn.textContent = "Cancel";
     cancelBtn.onclick = async () => {
       await window.api.cancelRun();
@@ -21,7 +65,9 @@ function showToast(message, type = "info", options = {}) {
 
   if (options.onRetry) {
     const retryBtn = document.createElement("button");
-    retryBtn.textContent = options.retryLabel || "↺ Retry";
+    retryBtn.type = "button";
+    retryBtn.className = "btn btn-secondary btn-sm";
+    retryBtn.innerHTML = ICONS.rotate + "<span>" + (options.retryLabel || "Retry") + "</span>";
     retryBtn.onclick = options.onRetry;
     toast.appendChild(retryBtn);
   }
@@ -55,18 +101,18 @@ function initComposeView() {
   actionSelect.value = "fixGrammar";
 
   function updateContextVisibility() {
-    contextField.style.display = actionSelect.value === "replyAssist" ? "block" : "none";
+    contextField.hidden = actionSelect.value !== "replyAssist";
   }
   actionSelect.addEventListener("change", updateContextVisibility);
   updateContextVisibility();
 
   function setRunning(running) {
-    runBtn.style.display = running ? "none" : "inline-block";
-    cancelBtn.style.display = running ? "inline-block" : "none";
+    runBtn.hidden = running;
+    cancelBtn.hidden = !running;
   }
 
   function hideModelPicker() {
-    modelPicker.classList.remove("show");
+    modelPicker.hidden = true;
     modelPickerList.innerHTML = "";
   }
 
@@ -82,7 +128,7 @@ function initComposeView() {
       hideModelPicker();
       if (result.fallbackModel) {
         showToast(result.message, "error", {
-          retryLabel: "↺ Retry",
+          retryLabel: "Retry",
           onRetry: async () => {
             setRunning(true);
             const retryResult = await window.api.retryWithModel(text, action, context, result.fallbackModel);
@@ -92,7 +138,7 @@ function initComposeView() {
         });
       } else {
         showToast(result.message, "error", {
-          retryLabel: "↺ Choose model",
+          retryLabel: "Choose model",
           onRetry: () => showModelPicker(result.models, action, text, context)
         });
       }
@@ -117,7 +163,7 @@ function initComposeView() {
       };
       modelPickerList.appendChild(btn);
     });
-    modelPicker.classList.add("show");
+    modelPicker.hidden = false;
   }
 
   runBtn.addEventListener("click", async () => {
@@ -147,10 +193,10 @@ function initComposeView() {
     if (!outputText.value) return;
     navigator.clipboard.writeText(outputText.value).then(() => {
       copyResultBtn.textContent = "Copied!";
-      copyResultBtn.classList.add("success");
+      copyResultBtn.classList.add("is-success");
       setTimeout(() => {
         copyResultBtn.textContent = "Copy Result";
-        copyResultBtn.classList.remove("success");
+        copyResultBtn.classList.remove("is-success");
       }, 2000);
     });
   });
@@ -187,15 +233,15 @@ function initSettingsView() {
   const quickFixHotkeyInput = document.getElementById("quickFixHotkey");
   const translitHotkeyInput = document.getElementById("translitHotkey");
   const quickFixActionSelect = document.getElementById("quickFixAction");
-  const saveBtn = document.getElementById("save-btn");
+  const apiKeyWarning = document.getElementById("api-key-warning");
 
   function applyProviderUI(provider) {
     if (provider === "lmstudio") {
-      geminiSection.style.display = "none";
-      lmstudioSection.style.display = "block";
+      geminiSection.hidden = true;
+      lmstudioSection.hidden = false;
     } else {
-      geminiSection.style.display = "block";
-      lmstudioSection.style.display = "none";
+      geminiSection.hidden = false;
+      lmstudioSection.hidden = true;
     }
   }
 
@@ -255,14 +301,17 @@ function initSettingsView() {
     quickFixActionSelect.value = settings.quickFixAction || "fixGrammar";
   }
 
-  saveBtn.addEventListener("click", async () => {
+  // There is no Save button to gate on a missing API key, so the field flags it
+  // inline instead of blocking the write.
+  function updateApiKeyWarning() {
+    apiKeyWarning.hidden =
+      providerSelect.value !== "gemini" || !!apiKeyInput.value.trim();
+  }
+
+  async function saveSettings() {
     const provider = providerSelect.value;
     const key = apiKeyInput.value.trim();
-
-    if (provider === "gemini" && !key) {
-      showToast("Please enter a valid Gemini API Key.", "error");
-      return;
-    }
+    updateApiKeyWarning();
 
     const result = await window.api.saveSettings({
       aiProvider: provider,
@@ -292,11 +341,25 @@ function initSettingsView() {
     } else if (result.autoStartOk === false) {
       showToast("Settings saved, but Windows startup could not be updated.", "error");
     } else {
-      showToast("Settings saved!", "success");
+      flashSaved();
     }
+  }
+
+  const saveSettingsDebounced = debounce(saveSettings, SAVE_DEBOUNCE_MS);
+
+  // Dropdowns and toggles commit at once. Hotkey fields use "change" so a
+  // half-typed accelerator is never sent to the global-shortcut registrar.
+  [providerSelect, modelSelect, fallbackModelSelect, includeContextCheckbox,
+   autoStartCheckbox, quickFixActionSelect, globalHotkeyInput, quickFixHotkeyInput,
+   translitHotkeyInput].forEach(el => {
+    el.addEventListener("change", saveSettings);
   });
 
-  loadSettings();
+  [apiKeyInput, lmStudioUrlInput, lmStudioModelInput].forEach(el => {
+    el.addEventListener("input", saveSettingsDebounced);
+  });
+
+  loadSettings().then(updateApiKeyWarning);
 }
 
 // ─── History View ───────────────────────────────────────────────────────────
@@ -326,7 +389,11 @@ async function renderHistory() {
   updateHistoryStats(history, lifetimeStats);
 
   if (history.length === 0) {
-    historyList.innerHTML = '<div class="empty-state">No history yet. Run an action in Compose!</div>';
+    historyList.innerHTML =
+      '<div class="empty-state">' +
+      '<strong>No edits yet</strong>' +
+      '<span>Run an action in Compose and it will show up here.</span>' +
+      '</div>';
     return;
   }
 
@@ -343,7 +410,7 @@ async function renderHistory() {
     fixedText.textContent = item.fixed;
 
     const timestamp = document.createElement("span");
-    timestamp.className = "history-timestamp";
+    timestamp.className = "history-meta";
     const actionLabel = ACTION_LABELS[item.action] || "Fix spelling & grammar";
     let meta = new Date(item.timestamp).toLocaleString() + " • " + actionLabel;
     if (item.responseTimeMs != null) meta += " • " + (item.responseTimeMs / 1000).toFixed(2) + "s";
@@ -358,13 +425,17 @@ async function renderHistory() {
     const actions = document.createElement("div");
     actions.className = "history-actions";
     const copyBtn = document.createElement("button");
-    copyBtn.className = "copy-btn";
-    copyBtn.textContent = "Copy Result";
+    copyBtn.type = "button";
+    copyBtn.className = "btn btn-outline btn-sm";
+    copyBtn.innerHTML = ICONS.copy + "<span>Copy result</span>";
     copyBtn.onclick = () => {
       navigator.clipboard.writeText(item.fixed).then(() => {
-        copyBtn.textContent = "Copied!";
-        copyBtn.classList.add("success");
-        setTimeout(() => { copyBtn.textContent = "Copy Result"; copyBtn.classList.remove("success"); }, 2000);
+        copyBtn.innerHTML = ICONS.check + "<span>Copied</span>";
+        copyBtn.classList.add("is-success");
+        setTimeout(() => {
+          copyBtn.innerHTML = ICONS.copy + "<span>Copy result</span>";
+          copyBtn.classList.remove("is-success");
+        }, 2000);
       });
     };
     actions.appendChild(copyBtn);
@@ -403,24 +474,28 @@ async function loadPrompts() {
     header.className = "prompt-header";
 
     const lbl = document.createElement("label");
+    lbl.className = "label";
     lbl.setAttribute("for", `prompt-${id}`);
     lbl.textContent = label;
 
     const hotkeyInput = document.createElement("input");
     hotkeyInput.type = "text";
     hotkeyInput.id = `prompt-hotkey-${id}`;
-    hotkeyInput.className = "prompt-hotkey";
+    hotkeyInput.className = "input input-mono prompt-hotkey";
     hotkeyInput.placeholder = "Shortcut (optional)";
     hotkeyInput.value = promptHotkeys[id] || "";
     hotkeyInput.title = "Optional global Electron shortcut, for example Control+Alt+1";
+    hotkeyInput.addEventListener("change", savePrompts);
 
     header.appendChild(lbl);
     header.appendChild(hotkeyInput);
 
     const ta = document.createElement("textarea");
     ta.id = `prompt-${id}`;
+    ta.className = "textarea";
     ta.rows = 4;
     ta.value = customPrompts[id] || DEFAULT_PROMPTS[id] || "";
+    ta.addEventListener("input", savePromptsDebounced);
 
     item.appendChild(header);
     item.appendChild(ta);
@@ -428,32 +503,31 @@ async function loadPrompts() {
   });
 }
 
-function initPromptsView() {
-  document.getElementById("save-prompts-btn").addEventListener("click", async () => {
-    const saved = {};
-    const savedHotkeys = {};
-    Object.keys(ACTION_LABELS).forEach(id => {
-      const ta = document.getElementById(`prompt-${id}`);
-      if (ta) saved[id] = ta.value.trim();
-      const hotkey = document.getElementById(`prompt-hotkey-${id}`);
-      if (hotkey) savedHotkeys[id] = hotkey.value.trim();
-    });
-    const result = await window.api.savePrompts(saved, savedHotkeys);
-    const btn = document.getElementById("save-prompts-btn");
-    const original = btn.textContent;
-    btn.textContent = "Saved!";
-    setTimeout(() => { btn.textContent = original; }, 1500);
-    if (Object.values(result.promptHotkeyOk || {}).some(ok => ok === false)) {
-      showToast("Prompts saved, but one or more shortcuts could not be registered.", "error");
-    } else {
-      showToast("Prompts and shortcuts saved!", "success");
-    }
+async function savePrompts() {
+  const saved = {};
+  const savedHotkeys = {};
+  Object.keys(ACTION_LABELS).forEach(id => {
+    const ta = document.getElementById(`prompt-${id}`);
+    if (ta) saved[id] = ta.value.trim();
+    const hotkey = document.getElementById(`prompt-hotkey-${id}`);
+    if (hotkey) savedHotkeys[id] = hotkey.value.trim();
   });
+  const result = await window.api.savePrompts(saved, savedHotkeys);
+  if (Object.values(result.promptHotkeyOk || {}).some(ok => ok === false)) {
+    showToast("Prompts saved, but one or more shortcuts could not be registered.", "error");
+  } else {
+    flashSaved();
+  }
+}
 
+const savePromptsDebounced = debounce(savePrompts, SAVE_DEBOUNCE_MS);
+
+function initPromptsView() {
   document.getElementById("reset-prompts-btn").addEventListener("click", async () => {
     if (!confirm("Reset all prompts to defaults? Your custom prompts will be lost.")) return;
     await window.api.resetPrompts();
-    loadPrompts();
+    await loadPrompts();
+    flashSaved();
   });
 }
 
@@ -471,10 +545,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const promptsBtn = document.getElementById("view-prompts-btn");
 
   function switchView(activeView, activeBtn) {
-    [composeView, settingsView, historyView, promptsView].forEach(v => v.classList.remove("active"));
-    [composeBtn, settingsBtn, historyBtn, promptsBtn].forEach(b => b.classList.remove("primary"));
-    activeView.classList.add("active");
-    activeBtn.classList.add("primary");
+    [composeView, settingsView, historyView, promptsView].forEach(v => {
+      v.removeAttribute("data-state");
+    });
+    [composeBtn, settingsBtn, historyBtn, promptsBtn].forEach(b => {
+      b.removeAttribute("data-state");
+      b.removeAttribute("aria-selected");
+    });
+    activeView.setAttribute("data-state", "active");
+    activeBtn.setAttribute("data-state", "active");
+    activeBtn.setAttribute("aria-selected", "true");
   }
 
   composeBtn.addEventListener("click", () => switchView(composeView, composeBtn));

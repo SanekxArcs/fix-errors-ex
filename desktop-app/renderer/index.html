@@ -6,154 +6,280 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-header">
+    <header class="app-header">
       <div class="brand-lockup">
-        <div class="brand-mark"><img src="Logo-Luigis-Box-16.png" alt=""></div>
+        <div class="brand-mark"><img src="Logo-Luigis-Box-16.png" alt="" /></div>
         <div>
           <h1>Fix Errors AI</h1>
           <p>Private writing tools</p>
         </div>
       </div>
-      <div class="status-pill"><span></span> Desktop app</div>
-    </div>
+      <div class="header-actions">
+        <span id="save-indicator" class="save-indicator" role="status" aria-live="polite" hidden></span>
+        <span class="badge badge-outline"><span class="badge-dot"></span> Desktop app</span>
+      </div>
+    </header>
 
-    <div class="nav-buttons app-tabs" role="tablist" aria-label="Main navigation">
-      <button id="view-compose-btn" class="primary" role="tab">Compose</button>
-      <button id="view-settings-btn" role="tab">Settings</button>
-      <button id="view-history-btn" role="tab">History</button>
-      <button id="view-prompts-btn" role="tab">Prompts</button>
+    <div class="tabs-list" role="tablist" aria-label="Main navigation">
+      <button type="button" id="view-compose-btn" class="tabs-trigger" role="tab" aria-selected="true" data-state="active">Compose</button>
+      <button type="button" id="view-settings-btn" class="tabs-trigger" role="tab">Settings</button>
+      <button type="button" id="view-history-btn" class="tabs-trigger" role="tab">History</button>
+      <button type="button" id="view-prompts-btn" class="tabs-trigger" role="tab">Prompts</button>
     </div>
 
     <main class="app-main">
       <!-- Compose View -->
-      <div id="compose-view" class="view-container active">
+      <div id="compose-view" class="tabs-content" role="tabpanel" data-state="active">
         <div class="page-heading">
-          <div>
-            <p class="eyebrow">WORKSPACE</p>
-            <h2>Compose and refine</h2>
-            <p class="page-description">Choose an action, then turn rough text into something ready to send.</p>
+          <h2>Compose and refine</h2>
+          <p class="page-description">Choose an action, then turn rough text into something ready to send.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-content compose-toolbar">
+            <div class="field">
+              <label class="label" for="actionSelect">Action</label>
+              <select id="actionSelect" class="select"></select>
+            </div>
+            <div class="toolbar-actions">
+              <button type="button" id="run-btn" class="btn btn-primary">Run action</button>
+              <button type="button" id="cancel-btn" class="btn btn-outline" hidden>Cancel</button>
+            </div>
           </div>
         </div>
 
-        <div class="compose-toolbar surface-card">
-          <div class="toolbar-field">
-            <label for="actionSelect">Action</label>
-            <select id="actionSelect"></select>
+        <div id="context-field" class="card" hidden>
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="contextInput">
+                Context <span class="label-muted">Optional · used by Reply Assist</span>
+              </label>
+              <textarea id="contextInput" class="textarea" placeholder="Paste conversation, describe tone, or add instructions…"></textarea>
+            </div>
           </div>
-          <div class="toolbar-actions">
-            <button id="run-btn" class="action-btn primary-action">Run action</button>
-            <button id="cancel-btn" class="action-btn" style="display:none;">Cancel</button>
-          </div>
-        </div>
-
-        <div id="context-field" class="surface-card">
-          <label for="contextInput">Context <span class="label-muted">Optional · used by Reply Assist</span></label>
-          <textarea id="contextInput" placeholder="Paste conversation, describe tone, or add instructions…"></textarea>
         </div>
 
         <div class="compose-grid">
-          <div class="compose-pane surface-card">
-            <div class="pane-heading"><label for="inputText">Original text</label><span>INPUT</span></div>
-            <textarea id="inputText" placeholder="Paste or type text here…"></textarea>
+          <div class="card compose-pane">
+            <div class="pane-heading">
+              <label class="label" for="inputText">Original text</label>
+              <span class="badge badge-outline">Input</span>
+            </div>
+            <textarea id="inputText" class="textarea" placeholder="Paste or type text here…"></textarea>
           </div>
-          <div class="compose-pane surface-card result-pane">
-            <div class="pane-heading"><label for="outputText">Result</label><span>OUTPUT</span></div>
-            <textarea id="outputText" placeholder="Your refined text will appear here…" readonly></textarea>
+          <div class="card compose-pane">
+            <div class="pane-heading">
+              <label class="label" for="outputText">Result</label>
+              <span class="badge badge-outline">Output</span>
+            </div>
+            <textarea id="outputText" class="textarea" placeholder="Your refined text will appear here…" readonly></textarea>
           </div>
         </div>
 
-        <div id="model-picker">
+        <div id="model-picker" hidden>
           <div class="picker-header">Retry with model</div>
           <div id="model-picker-list"></div>
         </div>
 
-        <div class="flex-row compose-footer">
-          <span class="footer-hint">Your text stays local unless you choose Gemini.</span>
-          <button id="copy-result-btn" class="action-btn">Copy result</button>
+        <div class="compose-footer">
+          <span class="field-hint">Your text stays local unless you choose Gemini.</span>
+          <button type="button" id="copy-result-btn" class="btn btn-outline">Copy result</button>
         </div>
       </div>
 
       <!-- Settings View -->
-      <div id="settings-view" class="view-container">
+      <div id="settings-view" class="tabs-content" role="tabpanel">
         <div class="page-heading">
-          <p class="eyebrow">PREFERENCES</p>
           <h2>Settings</h2>
           <p class="page-description">Control your provider, shortcuts, and Windows behavior.</p>
         </div>
-        <section class="settings-card">
-          <div class="section-heading"><div><h3>AI provider</h3><p>Choose where text processing happens.</p></div><span class="section-icon">✦</span></div>
-          <div class="form-group">
-            <label for="providerSelect">Provider</label>
-            <select id="providerSelect">
-              <option value="gemini">Google Gemini</option>
-              <option value="lmstudio">LM Studio (Local)</option>
-            </select>
-          </div>
 
-          <div id="gemini-section" class="provider-section">
-            <div class="form-group">
-              <label for="apiKey">Gemini API key</label>
-              <input type="password" id="apiKey" placeholder="Paste your API key here" />
+        <div class="section-heading">
+          <span class="section-title">AI provider</span>
+          <span class="text-muted">Choose where text processing happens.</span>
+        </div>
+
+        <div class="card">
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="providerSelect">Provider</label>
+              <select id="providerSelect" class="select">
+                <option value="gemini">Google Gemini</option>
+                <option value="lmstudio">LM Studio (Local)</option>
+              </select>
             </div>
-            <div class="form-grid">
-              <div class="form-group"><label for="modelSelect">Primary model</label><select id="modelSelect"></select></div>
-              <div class="form-group"><label for="fallbackModelSelect">Fallback model <span class="label-muted">Optional</span></label><select id="fallbackModelSelect"></select></div>
+
+            <div id="gemini-section">
+              <div class="field">
+                <label class="label" for="apiKey">Gemini API key</label>
+                <input type="password" id="apiKey" class="input" placeholder="Paste your API key here" />
+                <p id="api-key-warning" class="field-error" hidden>
+                  A Gemini API key is required before text can be processed.
+                </p>
+              </div>
+              <div class="card-grid" style="margin-top: 14px;">
+                <div class="field">
+                  <label class="label" for="modelSelect">Primary model</label>
+                  <select id="modelSelect" class="select"></select>
+                </div>
+                <div class="field">
+                  <label class="label" for="fallbackModelSelect">
+                    Fallback model <span class="label-muted">Optional</span>
+                  </label>
+                  <select id="fallbackModelSelect" class="select"></select>
+                </div>
+              </div>
+            </div>
+
+            <div id="lmstudio-section" class="card-grid" hidden>
+              <div class="field">
+                <label class="label" for="lmStudioUrl">Server URL</label>
+                <input type="text" id="lmStudioUrl" class="input" placeholder="http://localhost:1234" />
+              </div>
+              <div class="field">
+                <label class="label" for="lmStudioModel">Model identifier</label>
+                <input type="text" id="lmStudioModel" class="input" placeholder="e.g. qwen2.5-7b-instruct" />
+              </div>
             </div>
           </div>
+        </div>
 
-          <div id="lmstudio-section" class="provider-section" style="display: none;">
-            <div class="form-grid">
-              <div class="form-group"><label for="lmStudioUrl">Server URL</label><input type="text" id="lmStudioUrl" placeholder="http://localhost:1234" /></div>
-              <div class="form-group"><label for="lmStudioModel">Model identifier</label><input type="text" id="lmStudioModel" placeholder="e.g. qwen2.5-7b-instruct" /></div>
+        <div class="section-heading">
+          <span class="section-title">General</span>
+          <span class="text-muted">Make Fix Errors AI fit your daily workflow.</span>
+        </div>
+
+        <div class="card">
+          <div class="card-content">
+            <div class="switch-row">
+              <span class="switch-text">
+                <label class="label" for="includeContext">Include recent history as context</label>
+                <span class="field-hint">Experimental · gives the model more continuity.</span>
+              </span>
+              <input type="checkbox" id="includeContext" class="switch" />
+            </div>
+            <hr class="separator" />
+            <div class="switch-row">
+              <span class="switch-text">
+                <label class="label" for="autoStart">Start with Windows</label>
+                <span class="field-hint">Launch minimized to the system tray.</span>
+              </span>
+              <input type="checkbox" id="autoStart" class="switch" />
+            </div>
+            <hr class="separator" />
+            <div class="field">
+              <label class="label" for="globalHotkey">Show / hide shortcut</label>
+              <input type="text" id="globalHotkey" class="input input-mono" placeholder="Control+Shift+F" />
+              <span class="field-hint">Brings the app to the front from anywhere. Leave blank to disable.</span>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section class="settings-card">
-          <div class="section-heading"><div><h3>General</h3><p>Make Fix Errors AI fit your daily workflow.</p></div><span class="section-icon">⚙</span></div>
-          <label class="check-row" for="includeContext"><input type="checkbox" id="includeContext"><span><strong>Include recent history as context</strong><small>Experimental · gives the model more continuity.</small></span></label>
-          <label class="check-row" for="autoStart"><input type="checkbox" id="autoStart"><span><strong>Start with Windows</strong><small>Launch minimized to the system tray.</small></span></label>
-          <div class="form-group"><label for="globalHotkey">Show / hide shortcut</label><input type="text" id="globalHotkey" placeholder="Control+Shift+F" /><p>Brings the app to the front from anywhere. Leave blank to disable.</p></div>
-        </section>
+        <div class="section-heading">
+          <span class="section-title">System-wide actions</span>
+          <span class="text-muted">Run on selected text in another Windows app.</span>
+        </div>
 
-        <section class="settings-card">
-          <div class="section-heading"><div><h3>System-wide actions</h3><p>Run on selected text in another Windows app.</p></div><span class="section-icon">⌘</span></div>
-          <div class="form-grid">
-            <div class="form-group"><label for="quickFixHotkey">Quick Fix shortcut</label><input type="text" id="quickFixHotkey" placeholder="Shift+Alt+G" /></div>
-            <div class="form-group"><label for="quickFixAction">Quick Fix action</label><select id="quickFixAction"></select></div>
+        <div class="card">
+          <div class="card-content">
+            <div class="card-grid">
+              <div class="field">
+                <label class="label" for="quickFixHotkey">Quick Fix shortcut</label>
+                <input type="text" id="quickFixHotkey" class="input input-mono" placeholder="Shift+Alt+G" />
+              </div>
+              <div class="field">
+                <label class="label" for="quickFixAction">Quick Fix action</label>
+                <select id="quickFixAction" class="select"></select>
+              </div>
+            </div>
+            <span class="field-hint">
+              Select text, press the shortcut, and the result is pasted back in place. It must
+              differ from other shortcuts. Leave blank to disable.
+            </span>
+            <div class="alert">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+              <span>
+                Keyboard Layout is local and does not call AI. For apps running as Administrator,
+                run this app at the same privilege level.
+              </span>
+            </div>
+            <div class="field">
+              <label class="label" for="translitHotkey">Keyboard layout shortcut</label>
+              <input type="text" id="translitHotkey" class="input input-mono" placeholder="Shift+Alt+L" />
+            </div>
           </div>
-          <p>Select text, press the shortcut, and the result is pasted back in place. It must differ from other shortcuts. Leave blank to disable.</p>
-          <div class="callout">Keyboard Layout is local and does not call AI. For apps running as Administrator, run this app at the same privilege level.</div>
-          <div class="form-grid">
-            <div class="form-group"><label for="translitHotkey">Keyboard layout shortcut</label><input type="text" id="translitHotkey" placeholder="Shift+Alt+L" /></div>
-          </div>
-        </section>
-        <button id="save-btn" class="action-btn primary-action save-button">Save settings</button>
+        </div>
+
+        <span class="save-status">Changes are saved automatically</span>
       </div>
 
       <!-- History View -->
-      <div id="history-view" class="view-container">
-        <div class="page-heading"><p class="eyebrow">ACTIVITY</p><h2>History</h2><p class="page-description">A private record of your recent text edits.</p></div>
-        <div id="history-stats">
-          <div class="stat-box"><span id="stat-count" class="stat-value">0</span><span class="stat-label">Corrected</span></div>
-          <div class="stat-box"><span id="stat-time" class="stat-value">0s</span><span class="stat-label">Total time</span></div>
-          <div class="stat-box"><span id="stat-tokens" class="stat-value">0</span><span class="stat-label">Tokens used</span></div>
+      <div id="history-view" class="tabs-content" role="tabpanel">
+        <div class="page-heading">
+          <h2>History</h2>
+          <p class="page-description">A private record of your recent text edits.</p>
         </div>
-        <div class="section-heading history-heading"><div><h3>Recent edits</h3><p>Last 50 processed items.</p></div></div>
-        <div id="history-list"></div>
-        <div class="flex-row"><button id="clear-history-btn" class="action-btn danger">Clear history</button></div>
+
+        <div id="history-stats" class="stats-grid">
+          <div class="stat-card">
+            <span id="stat-count" class="stat-value">0</span>
+            <span class="stat-label">Corrected</span>
+          </div>
+          <div class="stat-card">
+            <span id="stat-time" class="stat-value">0s</span>
+            <span class="stat-label">Total time</span>
+          </div>
+          <div class="stat-card">
+            <span id="stat-tokens" class="stat-value">0</span>
+            <span class="stat-label">Tokens used</span>
+          </div>
+        </div>
+
+        <hr class="separator" />
+
+        <div class="section-heading">
+          <span class="section-title">Recent edits</span>
+          <span class="text-muted">Last 50 processed items.</span>
+        </div>
+        <div id="history-list" class="list"></div>
+        <div class="form-actions">
+          <button type="button" id="clear-history-btn" class="btn btn-destructive">Clear history</button>
+        </div>
       </div>
 
       <!-- Prompts View -->
-      <div id="prompts-view" class="view-container">
-        <div class="page-heading"><p class="eyebrow">AUTOMATION</p><h2>Prompts</h2><p class="page-description">Tune each action and optionally give it a global shortcut.</p></div>
-        <div class="callout">Leave shortcut fields empty to disable them. Shortcuts run on selected text in any Windows app. Reply Assist opens Compose so you can add conversation context before generating.</div>
-        <div id="prompts-list"></div>
-        <div class="flex-row"><button id="save-prompts-btn" class="action-btn primary-action">Save prompts</button><button id="reset-prompts-btn" class="action-btn">Reset defaults</button></div>
+      <div id="prompts-view" class="tabs-content" role="tabpanel">
+        <div class="page-heading">
+          <h2>Prompts</h2>
+          <p class="page-description">Tune each action and optionally give it a global shortcut.</p>
+        </div>
+
+        <div class="alert">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+          <span>
+            Leave shortcut fields empty to disable them. Shortcuts run on selected text in any
+            Windows app. Reply Assist opens Compose so you can add conversation context before
+            generating.
+          </span>
+        </div>
+
+        <div id="prompts-list" class="list"></div>
+        <div class="form-actions">
+          <span class="save-status">Changes are saved automatically</span>
+          <button type="button" id="reset-prompts-btn" class="btn btn-outline btn-sm">Reset defaults</button>
+        </div>
       </div>
     </main>
 
-    <div id="app-toast"></div>
+    <div id="app-toast" role="status" aria-live="polite"></div>
 
     <script src="../shared/constants.js"></script>
     <script src="app.js"></script>

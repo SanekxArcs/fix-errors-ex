@@ -1,9 +1,0 @@
-{
-  "recommendations": [
-    "Vue.vscode-typescript-vue-plugin",
-    "bradlc.vscode-tailwindcss",
-    "stivo.tailwind-fold",
-    "dbaeumer.vscode-eslint",
-    "sdras.vue-vscode-snippets"
-  ]
-}

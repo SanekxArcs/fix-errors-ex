@@ -20,12 +20,12 @@ if (!window.lbxFixErrorsInjected) {
       const { message, fallbackModel, models } = request;
       if (fallbackModel) {
         showToast(message, "error", {
-          retryLabel: "↺ Retry",
+          retryLabel: "Retry",
           onRetry: () => chrome.runtime.sendMessage({ action: "retryAI", model: fallbackModel })
         });
       } else {
         showToast(message, "error", {
-          retryLabel: "↺ Choose model",
+          retryLabel: "Choose model",
           onRetry: () => showModelPickerPanel(models)
         });
       }
@@ -154,71 +154,184 @@ if (!window.lbxFixErrorsInjected) {
     }
   }
 
+  // ── Injected UI ─────────────────────────────────────────────────────────
+  // The toast and panels below follow the shadcn/ui design language (slate base,
+  // blue accent, 0.5rem radius), but are written as inline styles rather than a
+  // stylesheet so no host-page CSS can bleed into them.
+  const UI = {
+    bg: "#020817",
+    subtle: "#0b1324",
+    fg: "#f8fafc",
+    muted: "#1e293b",
+    mutedHover: "#273549",
+    mutedFg: "#94a3b8",
+    border: "#1e293b",
+    primary: "#3b82f6",
+    primaryHover: "#5b9bf8",
+    primaryFg: "#0f172a",
+    destructive: "#f87171",
+    success: "#4ade80",
+    font: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    shadow: "0 10px 15px -3px rgba(0,0,0,0.45), 0 4px 6px -4px rgba(0,0,0,0.45)"
+  };
+
+  // Lucide icons — the same set shadcn/ui ships with.
+  const ICON = {
+    x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    alert: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    spinner: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="animation: lbx-spin 0.8s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+    rotate: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1.06 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
+  };
+
+  // Keyframes can't live in an inline style attribute, so inject them once under
+  // a prefixed name that won't collide with anything on the host page.
+  function ensureKeyframes() {
+    if (document.getElementById("lbx-ai-keyframes")) return;
+    const style = document.createElement("style");
+    style.id = "lbx-ai-keyframes";
+    style.textContent = "@keyframes lbx-spin{to{transform:rotate(360deg)}}";
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  // shadcn button variants/sizes, expressed as inline style strings.
+  const BUTTON_VARIANTS = {
+    primary: { base: UI.primary, fg: UI.primaryFg, hover: UI.primaryHover, border: "transparent" },
+    secondary: { base: UI.muted, fg: UI.fg, hover: UI.mutedHover, border: "transparent" },
+    outline: { base: "transparent", fg: UI.fg, hover: UI.muted, border: UI.border },
+    ghost: { base: "transparent", fg: UI.mutedFg, hover: UI.muted, border: "transparent" },
+    translucent: { base: "rgba(255,255,255,0.10)", fg: UI.fg, hover: "rgba(255,255,255,0.18)", border: "transparent" }
+  };
+
+  const BUTTON_SIZES = {
+    default: "height:30px;padding:0 12px;font-size:12px;",
+    sm: "height:26px;padding:0 10px;font-size:11.5px;",
+    icon: "height:24px;width:24px;padding:0;"
+  };
+
+  function makeButton(label, { variant = "secondary", size = "default", icon = "", title = "" } = {}) {
+    const v = BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.secondary;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (title) btn.title = title;
+    btn.innerHTML = icon + (label ? `<span>${label}</span>` : "");
+    btn.style.cssText = `
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      ${BUTTON_SIZES[size] || BUTTON_SIZES.default}
+      border:1px solid ${v.border};
+      border-radius:6px;
+      background:${v.base};
+      color:${v.fg};
+      font-family:${UI.font};
+      font-weight:500;
+      line-height:1;
+      white-space:nowrap;
+      cursor:pointer;
+      transition:background-color .15s, color .15s, border-color .15s;
+    `;
+    btn.onmouseover = () => {
+      btn.style.background = v.hover;
+      if (variant === "ghost" || variant === "outline") btn.style.color = UI.fg;
+    };
+    btn.onmouseout = () => {
+      btn.style.background = v.base;
+      btn.style.color = v.fg;
+    };
+    return btn;
+  }
+
+  function makeLabel(text) {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = `font-size:11.5px;font-weight:500;line-height:1.3;color:${UI.fg};margin-bottom:6px;`;
+    return el;
+  }
+
+  function makeKbd(text) {
+    const el = document.createElement("span");
+    el.textContent = text;
+    el.style.cssText = `
+      display:inline-flex;
+      align-items:center;
+      padding:1px 5px;
+      border:1px solid ${UI.border};
+      border-radius:4px;
+      background:${UI.muted};
+      color:${UI.mutedFg};
+      font-family:${UI.mono};
+      font-size:10px;
+      line-height:1.5;
+    `;
+    return el;
+  }
+
+  // Sonner-style toast: neutral popover surface with a coloured status icon,
+  // rather than a fully colour-flooded bar.
   function showToast(message, type = "info", options = {}) {
-    let toastId = "lbx-ai-toast";
+    ensureKeyframes();
+
+    const toastId = "lbx-ai-toast";
     let toast = document.getElementById(toastId);
 
     if (!toast) {
       toast = document.createElement("div");
       toast.id = toastId;
-      toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        border-radius: 8px;
-        color: white;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 14px;
-        z-index: 1000000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        pointer-events: auto;
-      `;
       document.body.appendChild(toast);
     }
 
-    const colors = {
-      working: "#1a73e8",
-      success: "#2e7d32",
-      error: "#d32f2f",
-      info: "#333"
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 360px;
+      padding: 11px 13px;
+      border: 1px solid ${UI.border};
+      border-radius: 10px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      box-shadow: ${UI.shadow};
+      z-index: 1000000;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity .25s ease, transform .25s cubic-bezier(0.32, 0.72, 0, 1);
+      pointer-events: auto;
+    `;
+
+    const statuses = {
+      working: { icon: ICON.spinner, color: UI.primary },
+      success: { icon: ICON.check, color: UI.success },
+      error: { icon: ICON.alert, color: UI.destructive },
+      info: { icon: ICON.info, color: UI.mutedFg }
     };
+    const status = statuses[type] || statuses.info;
 
-    toast.style.backgroundColor = colors[type] || colors.info;
+    toast.innerHTML = "";
 
-    toast.innerHTML = '';
+    const iconWrap = document.createElement("span");
+    iconWrap.innerHTML = status.icon;
+    iconWrap.style.cssText = `display:flex;flex-shrink:0;color:${status.color};`;
+    toast.appendChild(iconWrap);
 
     const textSpan = document.createElement("span");
     textSpan.innerText = message;
+    textSpan.style.cssText = "flex:1;min-width:0;";
     toast.appendChild(textSpan);
 
     if (type === "working") {
-      const cancelBtn = document.createElement("button");
-      cancelBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      `;
-      cancelBtn.style.cssText = `
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        color: white;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 4px;
-        margin-left: 4px;
-        transition: background 0.2s;
-      `;
-      cancelBtn.onmouseover = () => cancelBtn.style.backgroundColor = "rgba(255, 255, 255, 0.3)";
-      cancelBtn.onmouseout = () => cancelBtn.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
+      const cancelBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Cancel" });
+      cancelBtn.style.marginLeft = "2px";
       cancelBtn.onclick = () => {
         chrome.runtime.sendMessage({ action: "cancelAI" });
         showToast("Cancelling...", "info");
@@ -227,39 +340,29 @@ if (!window.lbxFixErrorsInjected) {
     }
 
     if (options.onRetry) {
-      const retryBtn = document.createElement("button");
-      retryBtn.textContent = options.retryLabel || "↺ Retry";
-      retryBtn.style.cssText = `
-        background: rgba(255, 255, 255, 0.18);
-        border: none;
-        color: white;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 500;
-        padding: 4px 10px;
-        margin-left: 8px;
-        white-space: nowrap;
-        font-family: inherit;
-      `;
-      retryBtn.onmouseover = () => { retryBtn.style.background = "rgba(255,255,255,0.28)"; };
-      retryBtn.onmouseout = () => { retryBtn.style.background = "rgba(255,255,255,0.18)"; };
+      const retryBtn = makeButton(options.retryLabel || "Retry", {
+        variant: "secondary",
+        size: "sm",
+        icon: ICON.rotate
+      });
+      retryBtn.style.marginLeft = "2px";
       retryBtn.onclick = options.onRetry;
       toast.appendChild(retryBtn);
     }
 
-    toast.style.opacity = "1";
-    toast.style.transform = "translateY(0)";
-
     // Don't auto-hide if there's a retry button — user needs time to act
     if (type !== "working" && !options.onRetry) {
-      setTimeout(() => {
+      clearTimeout(toast._hideTimer);
+      toast._hideTimer = setTimeout(() => {
         toast.style.opacity = "0";
-        toast.style.transform = "translateY(20px)";
+        toast.style.transform = "translateY(8px)";
       }, 4000);
+    } else {
+      clearTimeout(toast._hideTimer);
     }
   }
 
+  // Command-menu style popover listing the models available for a retry.
   function showModelPickerPanel(models) {
     const existing = document.getElementById("lbx-model-picker-panel");
     if (existing) existing.remove();
@@ -268,50 +371,55 @@ if (!window.lbxFixErrorsInjected) {
     panel.id = "lbx-model-picker-panel";
     panel.style.cssText = `
       position: fixed;
-      bottom: 72px;
+      bottom: 76px;
       right: 20px;
-      width: 270px;
-      background: #1e1e1e;
-      border: 1px solid #2a2a2a;
+      width: 290px;
+      border: 1px solid ${UI.border};
       border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #d4d4d4;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      box-shadow: ${UI.shadow};
       z-index: 1000002;
       overflow: hidden;
     `;
 
     const header = document.createElement("div");
+    header.textContent = "Retry with model";
     header.style.cssText = `
-      padding: 10px 14px 9px;
-      font-size: 12px;
+      padding: 9px 12px 8px;
+      border-bottom: 1px solid ${UI.border};
+      font-size: 10px;
       font-weight: 600;
-      color: #fff;
-      border-bottom: 1px solid #2a2a2a;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: ${UI.mutedFg};
     `;
-    header.textContent = "Retry with model:";
 
     const list = document.createElement("div");
-    list.style.cssText = "padding: 4px 0;";
+    list.style.cssText = "padding:4px;max-height:260px;overflow-y:auto;";
 
     models.forEach(m => {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.textContent = m.label;
       btn.style.cssText = `
         display: block;
         width: 100%;
         text-align: left;
-        padding: 8px 14px;
-        background: none;
+        padding: 7px 9px;
         border: none;
-        color: #c8c8c8;
-        font-size: 12px;
-        cursor: pointer;
+        border-radius: 6px;
+        background: transparent;
+        color: ${UI.mutedFg};
         font-family: inherit;
-        line-height: 1.3;
+        font-size: 12px;
+        line-height: 1.35;
+        cursor: pointer;
+        transition: background-color .12s, color .12s;
       `;
-      btn.onmouseover = () => { btn.style.background = "#2a2a2a"; btn.style.color = "#fff"; };
-      btn.onmouseout = () => { btn.style.background = "none"; btn.style.color = "#c8c8c8"; };
+      btn.onmouseover = () => { btn.style.background = UI.muted; btn.style.color = UI.fg; };
+      btn.onmouseout = () => { btn.style.background = "transparent"; btn.style.color = UI.mutedFg; };
       btn.onclick = () => {
         panel.remove();
         chrome.runtime.sendMessage({ action: "retryAI", model: m.id });
@@ -350,13 +458,13 @@ if (!window.lbxFixErrorsInjected) {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 320px;
-      background: #1e1e1e;
-      border: 1px solid #2a2a2a;
+      width: 340px;
+      border: 1px solid ${UI.border};
       border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #d4d4d4;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      box-shadow: ${UI.shadow};
       z-index: 1000001;
       overflow: hidden;
     `;
@@ -367,85 +475,80 @@ if (!window.lbxFixErrorsInjected) {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 11px 14px 10px;
-      border-bottom: 1px solid #2a2a2a;
+      gap: 8px;
+      padding: 12px 14px 11px;
+      border-bottom: 1px solid ${UI.border};
     `;
 
-    const titleEl = document.createElement("span");
+    const titleWrap = document.createElement("div");
+
+    const titleEl = document.createElement("div");
     titleEl.textContent = "Reply Assist";
-    titleEl.style.cssText = "font-size: 13px; font-weight: 600; color: #fff;";
+    titleEl.style.cssText = `font-size:13.5px;font-weight:600;letter-spacing:-0.01em;color:${UI.fg};`;
 
-    const closeBtn = document.createElement("button");
-    closeBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-    closeBtn.style.cssText = `
-      background: none;
-      border: none;
-      color: #555;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      padding: 2px;
-      border-radius: 4px;
-      line-height: 1;
-    `;
-    closeBtn.onmouseover = () => { closeBtn.style.color = "#d4d4d4"; };
-    closeBtn.onmouseout = () => { closeBtn.style.color = "#555"; };
+    const descEl = document.createElement("div");
+    descEl.textContent = "Refine the selected text in context.";
+    descEl.style.cssText = `font-size:11.5px;color:${UI.mutedFg};margin-top:2px;`;
 
-    header.appendChild(titleEl);
+    titleWrap.appendChild(titleEl);
+    titleWrap.appendChild(descEl);
+
+    const closeBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Close" });
+
+    header.appendChild(titleWrap);
     header.appendChild(closeBtn);
 
     // Body
     const body = document.createElement("div");
-    body.style.cssText = "padding: 12px 14px 10px;";
-
-    const previewLabel = document.createElement("div");
-    previewLabel.textContent = "Refining:";
-    previewLabel.style.cssText = "font-size: 10px; color: #555; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;";
+    body.style.cssText = "padding:12px 14px 12px;";
 
     const preview = document.createElement("div");
     const previewText = selectedText.length > 90 ? selectedText.slice(0, 90) + "…" : selectedText;
-    preview.textContent = `"${previewText}"`;
+    preview.textContent = previewText;
     preview.style.cssText = `
-      font-size: 11px;
-      color: #777;
-      background: #161616;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      border: 1px solid ${UI.border};
+      border-left: 2px solid ${UI.primary};
       border-radius: 6px;
-      padding: 7px 10px;
-      margin-bottom: 11px;
-      line-height: 1.45;
-      font-style: italic;
-      border: 1px solid #252525;
+      background: ${UI.subtle};
+      color: ${UI.mutedFg};
+      font-size: 11.5px;
+      line-height: 1.5;
       word-break: break-word;
     `;
-
-    const contextLabel = document.createElement("div");
-    contextLabel.textContent = "Context (optional):";
-    contextLabel.style.cssText = "font-size: 10px; color: #555; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;";
 
     const textarea = document.createElement("textarea");
     textarea.placeholder = "Paste conversation, describe tone, or add instructions…";
     textarea.rows = 3;
     textarea.style.cssText = `
       width: 100%;
-      background: #161616;
-      border: 1px solid #2a2a2a;
-      border-radius: 6px;
-      color: #d4d4d4;
-      font-size: 12px;
+      min-height: 68px;
       padding: 8px 10px;
+      border: 1px solid ${UI.border};
+      border-radius: 6px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: inherit;
+      font-size: 12.5px;
+      line-height: 1.5;
       resize: vertical;
       box-sizing: border-box;
-      font-family: inherit;
       outline: none;
-      line-height: 1.5;
-      min-height: 64px;
+      transition: border-color .15s, box-shadow .15s;
     `;
-    textarea.addEventListener("focus", () => { textarea.style.borderColor = "#3b82f6"; });
-    textarea.addEventListener("blur", () => { textarea.style.borderColor = "#2a2a2a"; });
+    textarea.addEventListener("focus", () => {
+      textarea.style.borderColor = UI.primary;
+      textarea.style.boxShadow = `0 0 0 1px ${UI.primary}`;
+    });
+    textarea.addEventListener("blur", () => {
+      textarea.style.borderColor = UI.border;
+      textarea.style.boxShadow = "none";
+    });
 
-    body.appendChild(previewLabel);
+    body.appendChild(makeLabel("Refining"));
     body.appendChild(preview);
-    body.appendChild(contextLabel);
+    body.appendChild(makeLabel("Context (optional)"));
     body.appendChild(textarea);
 
     // Footer
@@ -453,41 +556,18 @@ if (!window.lbxFixErrorsInjected) {
     footer.style.cssText = `
       display: flex;
       gap: 8px;
-      padding: 10px 14px 13px;
-      justify-content: flex-end;
       align-items: center;
+      padding: 11px 14px 13px;
+      border-top: 1px solid ${UI.border};
     `;
 
-    const hint = document.createElement("span");
-    hint.textContent = "Ctrl+Enter · Esc";
-    hint.style.cssText = "font-size: 10px; color: #444; margin-right: auto;";
+    const hint = document.createElement("div");
+    hint.style.cssText = "display:flex;align-items:center;gap:4px;margin-right:auto;";
+    hint.appendChild(makeKbd("Ctrl+↵"));
+    hint.appendChild(makeKbd("Esc"));
 
-    const cancelBtn = document.createElement("button");
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.style.cssText = `
-      padding: 6px 13px;
-      border-radius: 6px;
-      border: 1px solid #3a3a3a;
-      background: #2a2a2a;
-      color: #d4d4d4;
-      cursor: pointer;
-      font-size: 12px;
-    `;
-
-    const refineBtn = document.createElement("button");
-    refineBtn.textContent = "Refine";
-    refineBtn.style.cssText = `
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: none;
-      background: #1d4ed8;
-      color: white;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-    `;
-    refineBtn.onmouseover = () => { refineBtn.style.background = "#2563eb"; };
-    refineBtn.onmouseout = () => { refineBtn.style.background = "#1d4ed8"; };
+    const cancelBtn = makeButton("Cancel", { variant: "outline" });
+    const refineBtn = makeButton("Refine", { variant: "primary" });
 
     function submit() {
       const context = textarea.value.trim();

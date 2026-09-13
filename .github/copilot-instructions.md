@@ -13,7 +13,8 @@ extension for browsers/
   manifest.json   — Extension manifest (MV3): permissions, commands, content scripts
   background.js   — Service worker: context menu setup, shortcut handler, Gemini API calls
   content.js      — Injected into every page: handles text replacement, toast UI, selection getter
-  popup.html      — Extension popup: Settings / History / Shortcuts tabs (inline CSS)
+  popup.html      — Extension popup: Settings / History / Prompts / Shortcuts tabs
+  popup.css       — Popup styles: shadcn/ui-style design tokens + component classes (light/dark)
   popup.js        — Popup logic: view switching, API key save, history rendering, shortcut display
   icons/          — PNG icons at 16×16, 48×48, 128×128
 ```
