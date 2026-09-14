@@ -59,7 +59,7 @@ PRIVACY BY DESIGN
 • Your API key and settings are stored only on your device (chrome.storage.local) — never on our servers, because we don't have any servers.
 • Selected text is sent only to the AI provider you configured (Google Gemini or your own local LM Studio) to produce the result.
 • Your edit history (last 50 items) and all-time usage stats are kept locally on your device so you can review or clear them any time.
-• We do not collect, sell, or share your data. See our Privacy Policy for details: [PRIVACY POLICY URL]
+• We do not collect, sell, or share your data. See our Privacy Policy for details: https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html
 
 KEYBOARD SHORTCUTS
 Fully configurable at chrome://extensions/shortcuts:
@@ -67,7 +67,9 @@ Fully configurable at chrome://extensions/shortcuts:
 • Fix grammar on a manual selection only
 • Use selected text as a custom AI prompt
 
-Questions or feedback: [SUPPORT EMAIL]
+Taking too long, or changed your mind? Press Alt+Shift+Esc while a request is running to cancel it — your text is left exactly as you wrote it.
+
+Questions or feedback: oleksandr.dzisiak@gmail.com
 ```
 
 **Single purpose description** (required in the "Privacy practices" tab —
@@ -82,7 +84,7 @@ Lets the user apply an AI action (fix grammar, change tone, translate, format, o
 
 | Asset | Requirement | Status |
 |---|---|---|
-| Store icon | 128×128 PNG | ✅ `icons/Logo-Luigis-Box-128.png` already exists |
+| Store icon | 128×128 PNG | ✅ `icons/icon128.png` already exists |
 | Screenshot(s) | 1280×800 or 640×400, at least 1, up to 5 | ❌ need real screenshots of the popup and the context menu / toast in action |
 | Small promo tile | 440×280 | ❌ optional but recommended for discoverability |
 | Marquee promo tile | 1400×560 | ❌ optional, only shown if Google features the extension |
@@ -95,8 +97,28 @@ showing the all-time stats, (4) the Settings tab.
 
 ## Before you submit
 
-- [ ] Fill in `[PRIVACY POLICY URL]` and `[SUPPORT EMAIL]` above and in `PRIVACY_POLICY.md`
-- [ ] Host `PRIVACY_POLICY.md` somewhere public (GitHub Pages, Notion, your own site) and use that URL in the "Privacy policy" field of the dashboard
+- [ ] Enable GitHub Pages for `SanekxArcs/fix-errors-ex` (Settings → Pages → deploy from
+      `main`, root) so `landing-page/privacy.html` is publicly reachable, then confirm
+      `https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html` loads
+- [ ] Paste that URL into the dashboard's "Privacy policy" field
 - [ ] Capture and upload screenshots
 - [ ] Fill in the "Privacy practices" tab using `PERMISSIONS_JUSTIFICATION.md`
+- [ ] Build the upload package: `bash zip-extension.sh` → `fix-errors-ai-v<version>.zip`
 - [ ] Double-check the CWS Developer Dashboard field labels against this doc — Google adjusts wording occasionally
+
+## After it goes live
+
+- [ ] Replace the `href="#"` on the "Add to Chrome" button in `landing-page/index.html`
+      with the real Web Store listing URL
+
+## Packaging
+
+```sh
+cd "extension for browsers"
+bash zip-extension.sh
+```
+
+Produces `fix-errors-ai-v<version>.zip` (version read from `manifest.json`), excluding
+`store/`, the script itself, and any previous zips. Upload that file in the dashboard's
+"Package" tab. Bump `"version"` in `manifest.json` before every new upload — the Web
+Store rejects a package whose version is not higher than the published one.

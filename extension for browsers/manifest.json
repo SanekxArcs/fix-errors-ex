@@ -1,30 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Fix Errors AI",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Fix grammar, change tone, translate, or reply to messages on any site using AI — right from the right-click menu.",
   "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
-    "http://localhost/*"
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/Logo-Luigis-Box-16.png",
-      "48": "icons/Logo-Luigis-Box-48.png",
-      "128": "icons/Logo-Luigis-Box-128.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"]
-    }
-  ],
   "commands": {
     "fix_grammar": {
       "suggested_key": {
@@ -49,8 +44,8 @@
     }
   },
   "icons": {
-    "16": "icons/Logo-Luigis-Box-16.png",
-    "48": "icons/Logo-Luigis-Box-48.png",
-    "128": "icons/Logo-Luigis-Box-128.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }

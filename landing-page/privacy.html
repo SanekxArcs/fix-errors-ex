@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Fix Errors AI</title>
+    <meta
+      name="description"
+      content="How the Fix Errors AI browser extension handles your text, API key, settings and history."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #000;
+        color: #fff;
+      }
+      .card {
+        background: #0a0a0a;
+        border: 1px solid #1a1a1a;
+      }
+      .text-accent {
+        color: #3b82f6;
+      }
+    </style>
+  </head>
+  <body class="selection:bg-blue-500/30">
+    <header class="max-w-4xl mx-auto px-6 py-10">
+      <a href="index.html" class="flex items-center gap-3 group">
+        <div
+          class="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800 group-hover:border-blue-500 transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="w-4 h-4 text-zinc-500 group-hover:text-blue-500 transition-colors"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+        </div>
+        <span class="font-bold text-sm uppercase tracking-widest text-zinc-400"
+          >Back</span
+        >
+      </a>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-6 pb-32">
+      <h1 class="text-4xl md:text-5xl font-black mb-12 tracking-tight">
+        Privacy Policy
+      </h1>
+
+      <div
+        class="card p-8 md:p-12 rounded-[2.5rem] prose prose-invert prose-p:text-zinc-400 prose-headings:text-white max-w-none space-y-12"
+      >
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Overview
+          </h2>
+          <p class="leading-relaxed">
+            Fix Errors AI ("the Extension") is a browser extension that lets you
+            apply AI-powered text actions — fix grammar, change tone, translate,
+            format, draft a reply — to text you select on any webpage. This
+            policy explains what data the Extension handles and how.
+          </p>
+          <p class="leading-relaxed mt-4">
+            The Extension is developed and maintained by Oleksandr Dzisiak.
+            Contact:
+            <a
+              href="mailto:oleksandr.dzisiak@gmail.com"
+              class="text-accent hover:underline"
+              >oleksandr.dzisiak@gmail.com</a
+            >.
+          </p>
+          <p
+            class="text-[12px] font-bold text-zinc-600 mt-4 uppercase tracking-[0.2em]"
+          >
+            Effective date: September 14, 2026
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Text you select
+          </h2>
+          <p class="leading-relaxed">
+            When you trigger an action — via the "AI Text Tools" right-click menu
+            or a keyboard shortcut — the Extension sends the text you selected,
+            and optionally the text of the message you are replying to if you use
+            Reply Assist with "include context" enabled, to the AI provider you
+            have configured:
+          </p>
+          <ul class="mt-4 space-y-2 text-zinc-400 leading-relaxed">
+            <li>
+              <strong class="text-white">Google Gemini</strong> — using the API
+              key you provide, over HTTPS directly to
+              <code class="text-zinc-300">generativelanguage.googleapis.com</code
+              >, or
+            </li>
+            <li>
+              <strong class="text-white">LM Studio</strong> — a server you run
+              yourself, on your own machine.
+            </li>
+          </ul>
+          <p class="leading-relaxed mt-4">
+            The Extension does not run its own backend server. There is no
+            service in between: your text goes straight from your browser to the
+            provider you chose. We never see, log or store it.
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Your API key and settings
+          </h2>
+          <p class="leading-relaxed">
+            Your Gemini API key, chosen models, LM Studio server address and
+            preferences (auto-select, include-context, custom prompts) are stored
+            only in
+            <code class="text-zinc-300">chrome.storage.local</code> on your own
+            device. They are never transmitted to us, and are sent to the AI
+            provider only as part of making the request you asked for.
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Edit history and usage stats
+          </h2>
+          <p class="leading-relaxed">
+            The Extension keeps a local record of your last 50 text edits
+            (original text, result, action used, response time, token usage) and
+            running all-time totals, so you can review past edits and see your
+            usage at a glance. This history is stored only in
+            <code class="text-zinc-300">chrome.storage.local</code> on your
+            device. It is never sent to us. "Clear History" in the popup removes
+            the detailed list; uninstalling the Extension removes everything.
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Permissions
+          </h2>
+          <p class="leading-relaxed">
+            The Extension requests browser permissions solely to read your text
+            selection, call the AI provider you configured, and write the result
+            back into the page:
+          </p>
+          <ul class="mt-4 space-y-2 text-zinc-400 leading-relaxed">
+            <li>
+              <strong class="text-white">storage</strong> — save your settings,
+              prompts and local history.
+            </li>
+            <li>
+              <strong class="text-white">contextMenus</strong> — add the "AI Text
+              Tools" right-click submenu.
+            </li>
+            <li>
+              <strong class="text-white">activeTab + scripting</strong> — read
+              your selection and replace it, in the one tab where you triggered
+              an action. The Extension declares no content script on all sites
+              and runs nothing on pages at load time; access is granted by your
+              action and limited to that tab.
+            </li>
+            <li>
+              <strong class="text-white">Host access</strong> — the Gemini API
+              endpoint, plus the loopback address
+              (<code class="text-zinc-300">localhost</code> /
+              <code class="text-zinc-300">127.0.0.1</code>) for an LM Studio
+              server running on your own machine. No other host is requested.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            What we do not do
+          </h2>
+          <ul class="mt-2 space-y-2 text-zinc-400 leading-relaxed">
+            <li>
+              We do not operate any server that receives or stores your text,
+              your API key or your history.
+            </li>
+            <li>We do not sell, rent or share your data with third parties.</li>
+            <li>We do not use your data for advertising.</li>
+            <li>
+              We do not use your data for any purpose other than performing the
+              text action you requested.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Third-party AI providers
+          </h2>
+          <p class="leading-relaxed">
+            When you use Google Gemini, your selected text and any context sent
+            with it are subject to
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener"
+              class="text-accent hover:underline"
+              >Google's own terms and privacy policy</a
+            >
+            for the Gemini API. When you use LM Studio, your text is sent only to
+            the server address you configured — which you control.
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Children's privacy
+          </h2>
+          <p class="leading-relaxed">
+            Fix Errors AI is not directed at children under 13 and does not
+            knowingly collect data from them.
+          </p>
+        </section>
+
+        <section>
+          <h2
+            class="text-xl font-bold uppercase tracking-widest mb-4 flex items-center gap-2"
+          >
+            <span class="w-1 h-1 bg-blue-500 rounded-full"></span>
+            Changes and contact
+          </h2>
+          <p class="leading-relaxed">
+            If this policy changes, the updated version will be published at this
+            same URL with a new effective date. Questions about this policy or
+            your data:
+            <a
+              href="mailto:oleksandr.dzisiak@gmail.com"
+              class="text-accent hover:underline"
+              >oleksandr.dzisiak@gmail.com</a
+            >.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer
+      class="max-w-4xl mx-auto px-6 py-12 border-t border-zinc-900 text-center text-xs text-zinc-600 uppercase tracking-[0.2em] font-bold"
+    >
+      <a href="index.html" class="hover:text-zinc-400 transition-colors"
+        >Fix Errors AI</a
+      >
+    </footer>
+  </body>
+</html>

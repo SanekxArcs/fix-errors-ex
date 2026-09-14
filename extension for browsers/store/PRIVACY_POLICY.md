@@ -1,6 +1,6 @@
 # Privacy Policy — Fix Errors AI
 
-**Effective date:** July 2, 2026
+**Effective date:** September 14, 2026
 
 Fix Errors AI ("the extension") is a Chrome extension that lets you apply AI-powered
 text actions (fix grammar, change tone, translate, format, draft a reply, etc.) to text
@@ -9,8 +9,8 @@ how.
 
 ## Who runs this
 
-Fix Errors AI is developed and maintained by [YOUR NAME OR COMPANY]. Contact:
-[SUPPORT EMAIL].
+Fix Errors AI is developed and maintained by Oleksandr Dzisiak. Contact:
+oleksandr.dzisiak@gmail.com.
 
 ## What the extension does with your data
 
@@ -77,4 +77,4 @@ new effective date.
 
 ## Contact
 
-Questions about this policy or your data: [SUPPORT EMAIL].
+Questions about this policy or your data: oleksandr.dzisiak@gmail.com.

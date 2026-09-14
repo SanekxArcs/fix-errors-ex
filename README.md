@@ -74,21 +74,60 @@ Select text in any input, textarea or editable area, then either:
 The result replaces your selection in place. A toast in the bottom-right corner shows
 progress and lets you cancel a running request or retry with a different model.
 
+### Cancelling a request
+
+Press `Alt+Shift+Esc` while a request is running — or click the ✕ on the toast — to
+abort it. Your text is left exactly as you wrote it; nothing is replaced and nothing is
+added to history.
+
+Unlike the three shortcuts above, this one is not registered through
+`chrome.commands`, because Chrome reserves `Esc` and will not bind it. It is handled by
+the content script instead, which has two consequences: it only fires while the page
+itself has focus (not while you are typing in the address bar or another window), and
+it does not appear on the `chrome://extensions/shortcuts` page, so it cannot be
+rebound there.
+
 ### Layout
 
 ```
 extension for browsers/
-  manifest.json   — MV3 manifest: permissions, commands, content scripts
-  background.js   — Service worker: context menus, shortcuts, provider API calls
-  content.js      — Injected on demand: selection handling, text replacement, toast + panels
-  constants.js    — Shared defaults: prompts, action labels, Gemini model list
-  popup.html/.js  — Popup: Settings / History / Prompts / Shortcuts tabs
-  popup.css       — shadcn/ui-style design tokens and component classes
-  store/          — Chrome Web Store listing copy, privacy policy, permission rationale
+  manifest.json     — MV3 manifest: permissions, commands, icons
+  background.js     — Service worker: context menus, shortcuts, provider API calls
+  content.js        — Injected on demand: selection handling, text replacement, toast + panels
+  constants.js      — Shared defaults: prompts, action labels, Gemini model list
+  popup.html/.js    — Popup: Settings / History / Prompts / Shortcuts tabs
+  popup.css         — shadcn/ui-style design tokens and component classes
+  store/            — Chrome Web Store listing copy, privacy policy, permission rationale
+  zip-extension.sh  — Builds the upload package
+landing-page/       — Public site + hosted privacy policy (GitHub Pages)
 ```
 
 Settings and prompts save automatically as you edit them; history keeps the last 50
 edits plus all-time totals, and can be cleared from the History tab.
+
+There is no content script registered on `<all_urls>`. Nothing runs on a page at load
+time — `content.js` is injected into a single tab via `activeTab` + `chrome.scripting`
+only at the moment you trigger an action there.
+
+### Publishing to the Chrome Web Store
+
+```sh
+cd "extension for browsers"
+bash zip-extension.sh        # → fix-errors-ai-v<version>.zip
+```
+
+The version comes from `manifest.json`; bump it before every upload, since the Web
+Store rejects a package that is not newer than the published one. `store/` and the
+script itself are excluded from the archive.
+
+Listing copy, the privacy policy text and the per-permission justifications live in
+[`extension for browsers/store/`](extension%20for%20browsers/store/) — start with
+`STORE_LISTING.md`, which has the submission checklist.
+
+The privacy policy must be reachable at a public URL before submitting. Enable GitHub
+Pages for this repo (Settings → Pages → deploy from `main`, root) and the hosted copy
+in [`landing-page/`](landing-page/) becomes available at
+`https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html`.
 
 ---
 

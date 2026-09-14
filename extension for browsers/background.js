@@ -101,6 +101,16 @@ function isCapacityError(msg) {
     m.includes("temporarily unavailable") || m.includes("capacity");
 }
 
+// fetch() rejects an aborted request with a DOMException named "AbortError";
+// match that shape when we detect the abort ourselves, so callers only need one check.
+function makeAbortError() {
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "cancelAI") {
     if (currentAbortController) {
@@ -371,8 +381,8 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
     safeSendMessage(tab.id, { action: "showToast", message: "Done!", type: "success" });
   } catch (error) {
     currentAbortController = null;
-    if (error.name === "AbortError") {
-      safeSendMessage(tab.id, { action: "showToast", message: "AI process cancelled.", type: "info" });
+    if (isAbortError(error)) {
+      safeSendMessage(tab.id, { action: "showToast", message: "Cancelled — your text was left unchanged.", type: "info" });
       return;
     }
     console.error("AI Error:", error);
@@ -432,7 +442,7 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
   let lastError;
 
   for (const model of modelsToTry) {
-    if (signal?.aborted) throw new Error("AbortError");
+    if (signal?.aborted) throw makeAbortError();
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     try {
@@ -461,6 +471,8 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
       };
       return { text: stripSurroundingQuotes(aiResponseText.trim()), tokens };
     } catch (error) {
+      // A cancel is not a model failure — don't burn the fallback model on it.
+      if (isAbortError(error)) throw error;
       lastError = error;
       console.warn(`Gemini model failed: ${model}`, error);
     }

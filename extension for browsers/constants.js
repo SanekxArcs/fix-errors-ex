@@ -52,7 +52,7 @@ const ACTION_LABELS = {
 // capable enough for grammar and tone work.
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
-const DEFAULT_LM_STUDIO_URL = "http://192.168.1.114:1234";
+const DEFAULT_LM_STUDIO_URL = "http://localhost:1234";
 
 // Mirrors ai.google.dev/gemini-api/docs/models (checked 2026-09-13), ordered
 // with the recommended default first, then newest to oldest.

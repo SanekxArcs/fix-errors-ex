@@ -40,19 +40,23 @@ Required to send the user's selected text to the Google Gemini API for grammar, 
 translation, and formatting processing, using the API key the user provides in Settings.
 ```
 
-**Host permission: `http://localhost/*`**
+**Host permissions: `http://localhost/*` and `http://127.0.0.1/*`**
 ```
 Required so users who run a local LM Studio server on their own machine (an optional,
-privacy-preserving alternative to Gemini) can use it from the extension.
+privacy-preserving alternative to Gemini) can use it from the extension. Both spellings
+of the loopback address are listed because LM Studio may be reached under either.
+No other HTTP host is requested.
 ```
 
-**Content script matching `<all_urls>` / "runs on all sites"**
+**"Runs on all sites" / broad host access**
 ```
-The extension's core purpose is to act on text the user selects on any webpage — text
-boxes, contenteditable fields, chat apps, email, comment forms, etc. — so the content
-script must be available on all sites. It only reads the user's active selection when
-the user explicitly triggers an action; it does not read, scan, or transmit page
-content otherwise.
+The extension does NOT declare a content script on <all_urls> and does not run any code
+on pages at load time. content.js is injected into a single tab only at the moment the
+user explicitly triggers an action there — via the "AI Text Tools" right-click menu or a
+configured keyboard shortcut — using activeTab together with chrome.scripting. Access is
+granted by that user gesture, is limited to the one tab, and ends with the session; the
+extension never reads, scans, or transmits page content outside of the selection the
+user asked it to act on.
 ```
 
 **"Are you using remote code?"**

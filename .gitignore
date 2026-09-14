@@ -1,3 +1,6 @@
 desktop-app/node_modules
 desktop-app/dist
 desktop-app/build
+
+# Chrome Web Store upload packages built by zip-extension.sh
+extension for browsers/*.zip

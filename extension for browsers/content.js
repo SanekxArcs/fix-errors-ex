@@ -5,6 +5,10 @@ if (!window.lbxFixErrorsInjected) {
   // so we can restore it after the AI panel has stolen focus.
   let savedSelectionInfo = null;
 
+  // True while a request is running, i.e. while the "working" toast is up. Gates
+  // the Alt+Shift+Esc cancel shortcut so it never swallows a plain Escape.
+  let aiInProgress = false;
+
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "replaceText") {
       const { originalText, fixedText } = request;
@@ -270,10 +274,33 @@ if (!window.lbxFixErrorsInjected) {
     return el;
   }
 
+  // Aborts the running request and leaves the selected text untouched. Shared by
+  // the toast's cancel button and the Alt+Shift+Esc shortcut.
+  function cancelActiveJob() {
+    chrome.runtime.sendMessage({ action: "cancelAI" });
+    showToast("Cancelling...", "info");
+  }
+
+  // Alt+Shift+Esc cancels a running request. This can't be a chrome.commands
+  // shortcut — Chrome reserves Escape and won't bind it — so it's a page-level
+  // listener instead, which means it works while the page has focus.
+  //
+  // Capture phase + stopPropagation so it fires before the Reply Assist and
+  // model-picker panels, which close on a bare Escape.
+  document.addEventListener("keydown", (e) => {
+    if (!aiInProgress) return;
+    if (e.key !== "Escape" && e.code !== "Escape") return;
+    if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cancelActiveJob();
+  }, true);
+
   // Sonner-style toast: neutral popover surface with a coloured status icon,
   // rather than a fully colour-flooded bar.
   function showToast(message, type = "info", options = {}) {
     ensureKeyframes();
+    aiInProgress = type === "working";
 
     const toastId = "lbx-ai-toast";
     let toast = document.getElementById(toastId);
@@ -330,12 +357,19 @@ if (!window.lbxFixErrorsInjected) {
     toast.appendChild(textSpan);
 
     if (type === "working") {
-      const cancelBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Cancel" });
+      const kbd = makeKbd("Alt+Shift+Esc");
+      kbd.style.flexShrink = "0";
+      kbd.title = "Cancel without changing your text";
+      toast.appendChild(kbd);
+
+      const cancelBtn = makeButton("", {
+        variant: "ghost",
+        size: "icon",
+        icon: ICON.x,
+        title: "Cancel (Alt+Shift+Esc)"
+      });
       cancelBtn.style.marginLeft = "2px";
-      cancelBtn.onclick = () => {
-        chrome.runtime.sendMessage({ action: "cancelAI" });
-        showToast("Cancelling...", "info");
-      };
+      cancelBtn.onclick = cancelActiveJob;
       toast.appendChild(cancelBtn);
     }
 
