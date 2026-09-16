@@ -166,6 +166,8 @@ chrome.commands.onCommand.addListener(async (command) => {
           leadingText: response.leadingText,
           trailingText: response.trailingText
         });
+      } else {
+        warnNothingToFix(tab, autoSelectAll, response);
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
@@ -179,6 +181,8 @@ chrome.commands.onCommand.addListener(async (command) => {
           leadingText: response.leadingText,
           trailingText: response.trailingText
         });
+      } else {
+        warnNothingToFix(tab, false, response);
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
@@ -189,12 +193,29 @@ chrome.commands.onCommand.addListener(async (command) => {
       if (response && response.text && response.text.trim()) {
         pendingReplyAssistTab = tab;
         chrome.tabs.sendMessage(tab.id, { action: "showReplyAssistModal", selectedText: response.text }).catch(() => {});
+      } else {
+        warnNothingToFix(tab, false, response);
       }
     } catch (e) {
       console.warn("Could not get selection:", e);
     }
   }
 });
+
+// A shortcut that finds no text used to do nothing at all, which is indis-
+// tinguishable from the extension being broken. Say which of the three reasons
+// it was, so the fix is obvious from the toast alone.
+function warnNothingToFix(tab, autoSelectAll, response) {
+  let message;
+  if (!autoSelectAll) {
+    message = "Nothing selected. Select some text, or turn on auto-select in the extension settings.";
+  } else if (response && response.hadEditableTarget) {
+    message = "That field is empty — nothing to fix.";
+  } else {
+    message = "Auto-select needs a focused text field. Click into the field first, or select the text yourself.";
+  }
+  chrome.tabs.sendMessage(tab.id, { action: "showToast", message, type: "error" }).catch(() => {});
+}
 
 // ─── Keyboard layout translit (UA ↔ EN) ──────────────────────────────────────
 

@@ -35,14 +35,15 @@ if (!window.lbxFixErrorsInjected) {
       }
       if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "getSelection") {
-      const activeElement = document.activeElement;
-      if (request.autoSelectAll && activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable)) {
+      const activeElement = deepActiveElement();
+      const editable = isEditableElement(activeElement);
+      if (request.autoSelectAll && editable) {
         if (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA") {
           activeElement.select();
         } else {
           const range = document.createRange();
           range.selectNodeContents(activeElement);
-          const selection = window.getSelection();
+          const selection = getSelectionFor(activeElement);
           selection.removeAllRanges();
           selection.addRange(range);
         }
@@ -52,7 +53,7 @@ if (!window.lbxFixErrorsInjected) {
       // element rather than plain text. If one sits at the edge of the selection,
       // shrink the selection to exclude it so it's never touched by the replace step.
       let leadingText = "", trailingText = "";
-      const selection = window.getSelection();
+      const selection = getSelectionFor(activeElement);
       if (selection.rangeCount > 0 && activeElement && activeElement.isContentEditable) {
         const range = selection.getRangeAt(0);
         const edges = excludeEdgeAtomicNodes(range);
@@ -64,11 +65,37 @@ if (!window.lbxFixErrorsInjected) {
         }
       }
 
-      const text = window.getSelection().toString();
-      if (sendResponse) sendResponse({ text, leadingText, trailingText });
+      const text = getSelectionFor(activeElement).toString();
+      // hadEditableTarget lets the background tell "nothing was selected" apart
+      // from "auto-select had no text field to work with", so the toast can say
+      // which one it was instead of the shortcut failing silently.
+      if (sendResponse) sendResponse({ text, leadingText, trailingText, hadEditableTarget: editable });
     }
     return true;
   });
+
+  // document.activeElement stops at a shadow host, so on sites that build their
+  // editor as a web component it reports the wrapper rather than the field the
+  // caret is actually in. Walk down through open shadow roots to the real one.
+  function deepActiveElement() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
+  function isEditableElement(el) {
+    if (!el) return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
+  }
+
+  // A selection inside a shadow root lives on that root, not on the document.
+  function getSelectionFor(el) {
+    const root = el && el.getRootNode ? el.getRootNode() : null;
+    if (root && root.getSelection) return root.getSelection();
+    return window.getSelection();
+  }
 
   // A real mention/hashtag/emoji chip is a small inline element — never a block
   // wrapper that likely holds the entire message (which would empty the selection).
@@ -719,8 +746,10 @@ if (!window.lbxFixErrorsInjected) {
       }
     }
 
-    // Fallback: use current focus/selection (for context menu and other shortcuts)
-    const activeElement = document.activeElement;
+    // Fallback: use current focus/selection (for context menu and other shortcuts).
+    // Resolved the same way as in getSelection, so anything auto-select could
+    // reach is also something the replace step can write back into.
+    const activeElement = deepActiveElement();
 
     if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA")) {
       const start = activeElement.selectionStart;
@@ -743,7 +772,7 @@ if (!window.lbxFixErrorsInjected) {
       return;
     }
 
-    const selection = window.getSelection();
+    const selection = getSelectionFor(activeElement);
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       range.deleteContents();
