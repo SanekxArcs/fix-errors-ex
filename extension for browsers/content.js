@@ -338,6 +338,11 @@ if (!window.lbxFixErrorsInjected) {
       document.body.appendChild(toast);
     }
 
+    // A toast that is on its way out is being reused: cancel both the fade and
+    // the removal so it doesn't disappear while showing the new message.
+    clearTimeout(toast._hideTimer);
+    clearTimeout(toast._removeTimer);
+
     toast.style.cssText = `
       position: fixed;
       bottom: 20px;
@@ -407,20 +412,43 @@ if (!window.lbxFixErrorsInjected) {
         icon: ICON.rotate
       });
       retryBtn.style.marginLeft = "2px";
-      retryBtn.onclick = options.onRetry;
+      retryBtn.onclick = () => {
+        hideToast(toast);
+        options.onRetry();
+      };
       toast.appendChild(retryBtn);
+
+      // This toast never times out, so it needs a way out that isn't "wait for
+      // the next toast" — otherwise it sits over the corner of the page.
+      const closeBtn = makeButton("", {
+        variant: "ghost",
+        size: "icon",
+        icon: ICON.x,
+        title: "Dismiss"
+      });
+      closeBtn.style.marginLeft = "2px";
+      closeBtn.onclick = () => hideToast(toast);
+      toast.appendChild(closeBtn);
     }
 
     // Don't auto-hide if there's a retry button — user needs time to act
     if (type !== "working" && !options.onRetry) {
-      clearTimeout(toast._hideTimer);
-      toast._hideTimer = setTimeout(() => {
-        toast.style.opacity = "0";
-        toast.style.transform = "translateY(8px)";
-      }, 4000);
-    } else {
-      clearTimeout(toast._hideTimer);
+      toast._hideTimer = setTimeout(() => hideToast(toast), 4000);
     }
+  }
+
+  // Fading the toast out isn't enough: an invisible element still sits over the
+  // bottom-right corner of the page and eats clicks, so it leaves the DOM once
+  // the transition is done.
+  function hideToast(toast) {
+    toast = toast || document.getElementById("lbx-ai-toast");
+    if (!toast) return;
+    clearTimeout(toast._hideTimer);
+    clearTimeout(toast._removeTimer);
+    toast.style.pointerEvents = "none";
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    toast._removeTimer = setTimeout(() => toast.remove(), 300);
   }
 
   // Command-menu style popover listing the models available for a retry.
