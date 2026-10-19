@@ -34,7 +34,7 @@ breaks are preserved, so bullets use "•")
 ```
 Fix Errors AI helps you write better, faster, on any website — without copy-pasting into a separate AI chat window.
 
-Select any text in a text box, chat, email, or comment field, right-click, and pick an action from the "AI Text Tools" menu (or use a keyboard shortcut). The AI-improved text replaces your selection in place.
+Select text in a text box, chat, email, or comment field, then use the original writing shortcuts or choose an action from the "AI Text Tools" menu to process and replace it directly. For an optional review step, press Alt+Shift+R or choose "Review before applying…" to open an editing panel on the page. Review and edit the result, then choose "Done & copy" to copy and apply it. The review shortcut also opens with no selection so you can type or paste text. Shortcuts can be changed in your browser's extension shortcut settings.
 
 WHAT IT CAN DO
 • Fix spelling & grammar
@@ -53,7 +53,7 @@ Fix Errors AI does not run its own AI service and does not include any AI usage 
 • Google Gemini — use your own free or paid Gemini API key
 • LM Studio — point it at a local LM Studio server running on your own machine for fully private, offline text processing
 
-You can customize the system prompt behind every single action, and set a fallback Gemini model for when your primary model is at capacity.
+You can customize the system prompt behind every single action, and choose a fallback provider and model for when your primary model fails or reaches its saved budget. Gemini and LM Studio can fall back to each other, with separate model budgets.
 
 PRIVACY BY DESIGN
 • Your API key and settings are stored only on your device (chrome.storage.local) — never on our servers, because we don't have any servers.
@@ -66,8 +66,6 @@ Fully configurable at chrome://extensions/shortcuts:
 • Fix grammar on selected text
 • Fix grammar on a manual selection only
 • Use selected text as a custom AI prompt
-
-Taking too long, or changed your mind? Press Alt+Shift+Esc while a request is running to cancel it — your text is left exactly as you wrote it.
 
 Questions or feedback: oleksandr.dzisiak@gmail.com
 ```
@@ -89,9 +87,9 @@ Lets the user apply an AI action (fix grammar, change tone, translate, format, o
 | Small promo tile | 440×280 | ❌ optional but recommended for discoverability |
 | Marquee promo tile | 1400×560 | ❌ optional, only shown if Google features the extension |
 
-Suggested screenshots: (1) the right-click "AI Text Tools" menu open over selected
-text, (2) the success toast after a replacement, (3) the popup's History tab
-showing the all-time stats, (4) the Settings tab.
+Suggested screenshots: (1) the in-page refine panel with an original selection and an
+editable result, (2) the "AI Text Tools" menu, (3) the popup's History tab, and
+(4) the Settings tab.
 
 ---
 
@@ -115,10 +113,9 @@ showing the all-time stats, (4) the Settings tab.
 
 ```sh
 cd "extension for browsers"
-bash zip-extension.sh
+npm run zip
 ```
 
-Produces `fix-errors-ai-v<version>.zip` (version read from `manifest.json`), excluding
-`store/`, the script itself, and any previous zips. Upload that file in the dashboard's
-"Package" tab. Bump `"version"` in `manifest.json` before every new upload — the Web
+Produces a WXT-built Chrome ZIP under `.output/`. Upload that file in the dashboard's
+"Package" tab. Bump `version` in `wxt.config.ts` before every new upload — the Web
 Store rejects a package whose version is not higher than the published one.

@@ -1,8 +1,9 @@
-importScripts('constants.js');
+importScripts('constants.js', 'model-limits.js');
 
 // Use onInstalled to setup the context menus. Always clear existing ones first.
 chrome.runtime.onInstalled.addListener(() => {
   createContextMenus();
+  chrome.storage.local.remove("includeContext").catch(console.error);
 });
 
 function createContextMenus() {
@@ -10,6 +11,12 @@ function createContextMenus() {
     chrome.contextMenus.create({
       id: "aiTextTools",
       title: "AI Text Tools",
+      contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+      id: "reviewText",
+      parentId: "aiTextTools",
+      title: "Review before applying…",
       contexts: ["selection"]
     });
 
@@ -91,7 +98,8 @@ const ACTION_IDS = new Set(Object.keys(DEFAULT_PROMPTS));
 
 let currentAbortController = null;
 let pendingReplyAssistTab = null;
-let pendingRetry = null;
+const pendingRetries = new Map();
+const reviewControllers = new Map();
 
 function isCapacityError(msg) {
   if (!msg) return false;
@@ -112,7 +120,16 @@ function isAbortError(error) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "cancelAI") {
+  if (request.action === "getModelTokenLimits") {
+    (async () => {
+      if (!/^[a-zA-Z0-9._-]+$/.test(request.model || "")) throw new Error("Choose a valid Gemini model.");
+      const { geminiApiKey } = await chrome.storage.local.get("geminiApiKey");
+      if (!geminiApiKey) throw new Error("Add a Gemini API key to load the model's token limits automatically.");
+      const caps = await getGeminiModelCaps(request.model, geminiApiKey, null, modelLimitKey("gemini", request.model));
+      return { ok: true, inputTokenLimit: caps.inputTokenLimit, outputTokenLimit: caps.outputTokenLimit };
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  } else if (request.action === "cancelAI") {
     if (currentAbortController) {
       currentAbortController.abort();
       currentAbortController = null;
@@ -125,82 +142,201 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       processTextWithAI(selectedText, tab, "replyAssist", context);
     }
   } else if (request.action === "retryAI") {
-    if (pendingRetry && sender.tab) {
-      const retry = pendingRetry;
-      pendingRetry = null;
-      processTextWithAI(retry.originalText, sender.tab, retry.action, retry.context, request.model);
+    const retry = sender.tab && pendingRetries.get(sender.tab.id);
+    if (retry && retry.expiresAt > Date.now()) {
+      pendingRetries.delete(sender.tab.id);
+      const override = request.provider === "lmstudio" ? { provider: "lmstudio" } : { provider: "gemini", model: request.model };
+      processTextWithAI(retry.originalText, sender.tab, retry.action, retry.context, override);
     }
+  } else if (request.action === "retryPickerOpened") {
+    const retry = sender.tab && pendingRetries.get(sender.tab.id);
+    if (retry && retry.expiresAt > Date.now()) {
+      clearTimeout(retry.timer);
+      retry.expiresAt = Date.now() + 15000;
+      retry.timer = setTimeout(() => { if (pendingRetries.get(sender.tab.id) === retry) pendingRetries.delete(sender.tab.id); }, 15000);
+    }
+  } else if (request.action === "processReview") {
+    processReview(request, sendResponse);
+    return true;
+  } else if (request.action === "commitReview") {
+    commitReview(request).then(result => sendResponse({ ok: true, ...result })).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  } else if (request.action === "cancelReview") {
+    reviewControllers.get(request.reviewId)?.abort();
+    chrome.storage.session.remove(`review:${request.reviewId}`);
   }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const action = info.menuItemId;
-  if (!ACTION_IDS.has(action) || !info.selectionText) return;
-  if (action === "translit") {
-    await processTranslit(info.selectionText, tab);
-    return;
+  if ((!ACTION_IDS.has(action) && action !== "reviewText") || !info.selectionText) return;
+  let selection;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    if (action !== "reviewText") await chrome.tabs.sendMessage(tab.id, { action: "dismissReview" });
+    selection = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
+  } catch (error) {
+    console.warn("Could not capture the page selection:", error);
   }
-  await processTextWithAI(info.selectionText, tab, action);
+  const text = selection?.text || info.selectionText;
+  if (action === "reviewText") {
+    await openReview(tab, { ...selection, text }, "fixGrammar");
+  } else if (action === "translit") {
+    await processTranslit(text, tab);
+  } else {
+    await processTextWithAI(text, tab, action, "", null, selection);
+  }
 });
 
 // Keyboard shortcut handler
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "fix_grammar" && command !== "fix_selected" && command !== "ai_prompt") return;
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
-
+  if (!["fix_grammar", "fix_selected", "ai_prompt", "open_refine"].includes(command)) return;
+  reportShortcutStatus("…", "#6377e8");
+  let tab;
   try {
+    [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error("No active browser tab was found.");
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
-  } catch (e) {
-    console.warn("Script injection failed:", e);
-    return;
-  }
-
-  if (command === "fix_grammar") {
-    const { autoSelectAll = false } = await chrome.storage.local.get("autoSelectAll");
-    try {
+    if (command !== "open_refine") await chrome.tabs.sendMessage(tab.id, { action: "dismissReview" });
+    if (command === "fix_grammar") {
+      const { autoSelectAll = false } = await chrome.storage.local.get("autoSelectAll");
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll });
       if (response && response.text && response.text.trim()) {
-        await processTextWithAI(response.text, tab, "fixGrammar", "", null, {
-          leadingText: response.leadingText,
-          trailingText: response.trailingText
-        });
+        await processTextWithAI(response.text, tab, "fixGrammar", "", null, response);
       } else {
         warnNothingToFix(tab, autoSelectAll, response);
       }
-    } catch (e) {
-      console.warn("Could not get selection:", e);
-    }
-  } else if (command === "fix_selected") {
-    // Always use only the manually selected text, ignoring autoSelectAll setting
-    try {
+    } else if (command === "fix_selected") {
+      // Always use only the manually selected text, ignoring autoSelectAll setting
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
-      if (response && response.text && response.text.trim()) {
-        await processTextWithAI(response.text, tab, "fixGrammar", "", null, {
-          leadingText: response.leadingText,
-          trailingText: response.trailingText
-        });
+      if (response?.text?.trim()) {
+        await processTextWithAI(response.text, tab, "fixGrammar", "", null, response);
       } else {
         warnNothingToFix(tab, false, response);
       }
-    } catch (e) {
-      console.warn("Could not get selection:", e);
-    }
-  } else if (command === "ai_prompt") {
-    try {
+    } else if (command === "ai_prompt") {
       const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
       if (response && response.text && response.text.trim()) {
         pendingReplyAssistTab = tab;
-        chrome.tabs.sendMessage(tab.id, { action: "showReplyAssistModal", selectedText: response.text }).catch(() => {});
+        await chrome.tabs.sendMessage(tab.id, { action: "showReplyAssistModal", selectedText: response.text });
       } else {
         warnNothingToFix(tab, false, response);
       }
-    } catch (e) {
-      console.warn("Could not get selection:", e);
+    } else if (command === "open_refine") {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: "getSelection", autoSelectAll: false });
+      await openReview(tab, response || { text: "" }, "fixGrammar");
     }
+    await chrome.storage.local.remove("lastShortcutError");
+    chrome.action.setTitle({ title: "Fix Errors AI" });
+    reportShortcutStatus("✓", "#16845b");
+  } catch (error) {
+    console.error("Shortcut failed:", error);
+    const originalMessage = error?.message || String(error);
+    const message = /extensions gallery cannot be scripted/i.test(originalMessage)
+      ? "Chrome blocks extensions on the Chrome Web Store. Open a regular webpage to use this shortcut."
+      : originalMessage;
+    await chrome.storage.local.set({ lastShortcutError: { message, originalMessage, at: Date.now() } }).catch(() => {});
+    chrome.action.setTitle({ title: `Shortcut failed: ${message.slice(0, 220)}` });
+    if (tab?.id != null) {
+      chrome.tabs.sendMessage(tab.id, {
+        action: "showToast",
+        message: `Shortcut failed: ${message}`,
+        type: "error"
+      }).catch(() => {});
+    }
+    reportShortcutStatus("!", "#c33b3b");
   }
 });
+
+function reportShortcutStatus(text, color) {
+  chrome.action.setBadgeBackgroundColor({ color });
+  chrome.action.setBadgeText({ text });
+  setTimeout(() => chrome.action.setBadgeText({ text: "" }), 1800);
+}
+
+async function openReview(tab, selection, action) {
+  const reviewId = crypto.randomUUID();
+  await chrome.storage.session.set({ [`review:${reviewId}`]: {
+    tabId: tab.id,
+    original: selection.text || "",
+    action,
+    canReplace: Boolean(selection.hadEditableTarget),
+    createdAt: Date.now()
+  }});
+  await chrome.tabs.sendMessage(tab.id, {
+    action: "openReviewPanel",
+    reviewId,
+    original: selection.text || "",
+    actionId: action,
+    canReplace: Boolean(selection.hadEditableTarget)
+  });
+}
+
+async function processReview(request, sendResponse) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new DOMException("Processing timed out. Please try again.", "TimeoutError")), 30000);
+  reviewControllers.get(request.reviewId)?.abort();
+  reviewControllers.set(request.reviewId, controller);
+  try {
+    const { [`review:${request.reviewId}`]: review } = await chrome.storage.session.get(`review:${request.reviewId}`);
+    if (!review) throw new Error("This review has expired. Select the text again to start over.");
+    const actionId = request.actionId;
+    if (!ACTION_IDS.has(actionId)) throw new Error("Choose a valid writing action.");
+    const sourceText = String(request.text ?? review.original ?? "");
+    if (!sourceText.trim()) throw new Error("Enter some text to refine first.");
+    if (actionId === "translit") {
+      const text = translitKeyboard(sourceText);
+      if (text === sourceText) throw new Error("No keyboard layout change was detected.");
+      sendResponse({ ok: true, text, tokens: null, responseTimeMs: 0 });
+      return;
+    }
+
+    const settings = await chrome.storage.local.get([
+      "aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel",
+      "lmStudioUrl", "lmStudioModel", "fallbackProvider", "fallbackLmStudioUrl", "fallbackLmStudioModel"
+    ]);
+    const startedAt = Date.now();
+    const result = await callConfiguredAI(sourceText, settings, actionId, controller.signal);
+    if (!result.text) throw new Error("The AI returned no text. Your original selection is unchanged.");
+    sendResponse({ ok: true, text: result.text, tokens: result.tokens, responseTimeMs: Date.now() - startedAt });
+  } catch (error) {
+    sendResponse({ ok: false, error: isAbortError(error) ? "Processing cancelled." : error.message || "Something went wrong while processing your text." });
+  } finally {
+    clearTimeout(timeout);
+    if (reviewControllers.get(request.reviewId) === controller) reviewControllers.delete(request.reviewId);
+  }
+}
+
+async function commitReview(request) {
+  const key = `review:${request.reviewId}`;
+  const { [key]: review } = await chrome.storage.session.get(key);
+  if (!review) throw new Error("This review has expired.");
+  if (!request.text?.trim()) throw new Error("The result is empty.");
+  const originalText = String(request.originalText ?? review.original ?? "");
+  await chrome.scripting.executeScript({ target: { tabId: review.tabId }, files: ["content.js"] });
+  let replaced = false;
+  if (review.canReplace) {
+    const response = await chrome.tabs.sendMessage(review.tabId, {
+      action: "replaceText",
+      originalText: review.original,
+      fixedText: request.text
+    });
+    if (!response?.replaced) throw new Error(response?.error || "The original field is no longer available. Your result is copied; paste it where you need it.");
+    replaced = true;
+  } else {
+    await chrome.tabs.sendMessage(review.tabId, { action: "restoreSelection" });
+  }
+  await addHistoryEntry({
+    timestamp: new Date().toISOString(),
+    original: originalText,
+    fixed: request.text,
+    action: request.actionId || review.action,
+    tokens: request.tokens || null,
+    responseTimeMs: request.responseTimeMs || 0
+  });
+  await chrome.storage.session.remove(key);
+  return { replaced };
+}
 
 // A shortcut that finds no text used to do nothing at all, which is indis-
 // tinguishable from the extension being broken. Say which of the three reasons
@@ -223,7 +359,7 @@ const UA_TO_EN_MAP = {
   'й':'q','ц':'w','у':'e','к':'r','е':'t','н':'y','г':'u','ш':'i','щ':'o','з':'p','х':'[','ї':']',
   'ф':'a','і':'s','в':'d','а':'f','п':'g','р':'h','о':'j','л':'k','д':'l','ж':';','є':"'",
   'я':'z','ч':'x','с':'c','м':'v','и':'b','т':'n','ь':'m','б':',','ю':'.',
-  'Й':'Q','Ц':'W','У':'E','К':'R','Є':'T','Н':'Y','Г':'U','Ш':'I','Щ':'O','З':'P','Х':'{','Ї':'}',
+  'Й':'Q','Ц':'W','У':'E','К':'R','Е':'T','Н':'Y','Г':'U','Ш':'I','Щ':'O','З':'P','Х':'{','Ї':'}',
   'Ф':'A','І':'S','В':'D','А':'F','П':'G','Р':'H','О':'J','Л':'K','Д':'L','Ж':':','Є':"\"",
   'Я':'Z','Ч':'X','С':'C','М':'V','И':'B','Т':'N','Ь':'M','Б':'<','Ю':'>'
 };
@@ -232,7 +368,7 @@ const EN_TO_UA_MAP = {
   'q':'й','w':'ц','e':'у','r':'к','t':'е','y':'н','u':'г','i':'ш','o':'щ','p':'з',
   'a':'ф','s':'і','d':'в','f':'а','g':'п','h':'р','j':'о','k':'л','l':'д',
   'z':'я','x':'ч','c':'с','v':'м','b':'и','n':'т','m':'ь',
-  'Q':'Й','W':'Ц','E':'У','R':'К','T':'Є','Y':'Н','U':'Г','I':'Ш','O':'Щ','P':'З',
+  'Q':'Й','W':'Ц','E':'У','R':'К','T':'Е','Y':'Н','U':'Г','I':'Ш','O':'Щ','P':'З',
   'A':'Ф','S':'І','D':'В','F':'А','G':'П','H':'Р','J':'О','K':'Л','L':'Д',
   'Z':'Я','X':'Ч','C':'С','V':'М','B':'И','N':'Т','M':'Ь'
 };
@@ -324,17 +460,12 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
     geminiFallbackModel,
     lmStudioUrl,
     lmStudioModel,
-    includeContext = false
-  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "lmStudioUrl", "lmStudioModel", "includeContext"]);
+    fallbackProvider,
+    fallbackLmStudioUrl,
+    fallbackLmStudioModel
+  } = await chrome.storage.local.get(["aiProvider", "geminiApiKey", "geminiModel", "geminiFallbackModel", "lmStudioUrl", "lmStudioModel", "fallbackProvider", "fallbackLmStudioUrl", "fallbackLmStudioModel"]);
 
-  if (aiProvider !== "lmstudio" && !geminiApiKey) {
-    chrome.tabs.sendMessage(tab.id, {
-      action: "showToast",
-      message: "Please set your Gemini API Key in the extension popup.",
-      type: "error"
-    }).catch(() => {});
-    return;
-  }
+  pendingRetries.delete(tab.id);
 
   const safeSendMessage = (tabId, message) => {
     chrome.tabs.sendMessage(tabId, message).catch(err => {
@@ -349,37 +480,13 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
     const signal = currentAbortController.signal;
 
     const t0 = Date.now();
-    let result;
-    const { history = [] } = await chrome.storage.local.get("history");
-    const historyContext = includeContext ? history : [];
-
-    if (modelOverride) {
-      // Retry with a specific model — no fallback, always Gemini
-      result = await callGeminiAI(
-        originalText, geminiApiKey, action, modelOverride, "", historyContext, signal, context
-      );
-    } else if (aiProvider === "lmstudio") {
-      result = await callLMStudioAI(
-        originalText,
-        lmStudioUrl || DEFAULT_LM_STUDIO_URL,
-        lmStudioModel || "",
-        action,
-        historyContext,
-        signal,
-        context
-      );
-    } else {
-      result = await callGeminiAI(
-        originalText,
-        geminiApiKey,
-        action,
-        geminiModel || DEFAULT_GEMINI_MODEL,
-        geminiFallbackModel || "",
-        historyContext,
-        signal,
-        context
-      );
-    }
+    const result = await callConfiguredAI(originalText, {
+      aiProvider, geminiApiKey, geminiModel, geminiFallbackModel,
+      lmStudioUrl, lmStudioModel, fallbackProvider, fallbackLmStudioUrl, fallbackLmStudioModel
+    }, action, signal, context, modelOverride, target => {
+      const providerName = target.provider === "lmstudio" ? "LM Studio" : "Gemini";
+      safeSendMessage(tab.id, { action: "showToast", message: `Trying ${providerName} fallback…`, type: "working" });
+    });
     currentAbortController = null;
     const responseTimeMs = Date.now() - t0;
     const { text: fixedText, tokens } = result;
@@ -408,17 +515,19 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
     }
     console.error("AI Error:", error);
 
-    if (isCapacityError(error.message) && aiProvider !== "lmstudio") {
+    if (isCapacityError(error.message)) {
       // Store context for the retry; content.js will show the retry UI
-      pendingRetry = { originalText, action, context };
-      const fallbackModel = (!modelOverride && geminiFallbackModel && geminiFallbackModel !== (geminiModel || DEFAULT_GEMINI_MODEL))
-        ? geminiFallbackModel
-        : null;
+      const retry = { originalText, action, context, expiresAt: Date.now() + 15000 };
+      pendingRetries.set(tab.id, retry);
+      retry.timer = setTimeout(() => { if (pendingRetries.get(tab.id) === retry) pendingRetries.delete(tab.id); }, 15000);
+      const models = GEMINI_MODELS.map(model => ({ ...model, provider: "gemini" }));
+      if (aiProvider === "lmstudio" || fallbackProvider === "lmstudio") {
+        models.push({ id: "configured-local", provider: "lmstudio", label: "LM Studio (configured local model)" });
+      }
       safeSendMessage(tab.id, {
         action: "showRetryableError",
         message: error.message,
-        fallbackModel,
-        models: GEMINI_MODELS
+        models
       });
     } else {
       safeSendMessage(tab.id, { action: "showToast", message: "Error: " + error.message, type: "error" });
@@ -433,6 +542,75 @@ function stripSurroundingQuotes(str) {
     return str.slice(1, -1);
   }
   return str;
+}
+
+function configuredFallback(settings) {
+  // Preserve an existing Gemini fallback when upgrading from older versions.
+  const provider = settings.fallbackProvider ?? (settings.geminiFallbackModel ? "gemini" : "none");
+  if (provider === "gemini" && settings.geminiFallbackModel) return { provider, model: settings.geminiFallbackModel };
+  if (provider === "lmstudio") return {
+    provider, model: settings.fallbackLmStudioModel || "",
+    url: settings.fallbackLmStudioUrl || DEFAULT_LM_STUDIO_URL
+  };
+  return null;
+}
+
+async function callConfiguredAI(text, settings, action, signal, context = "", override = null, onFallback = null) {
+  const primary = settings.aiProvider === "lmstudio"
+    ? { provider: "lmstudio", model: settings.lmStudioModel || "", url: settings.lmStudioUrl || DEFAULT_LM_STUDIO_URL }
+    : { provider: "gemini", model: settings.geminiModel || DEFAULT_GEMINI_MODEL };
+  let fallback = configuredFallback(settings);
+  let target = primary;
+  if (override) {
+    if (override.provider === "lmstudio") {
+      target = fallback?.provider === "lmstudio" ? fallback : primary.provider === "lmstudio" ? primary : null;
+      if (!target) throw new Error("Set up an LM Studio provider before retrying locally.");
+    } else {
+      const model = typeof override === "string" ? override : override.model;
+      if (!model) throw new Error("Choose a retry model.");
+      target = { provider: "gemini", model };
+    }
+    fallback = null;
+  }
+  if (fallback && modelLimitKey(target.provider, target.model, target.url) === modelLimitKey(fallback.provider, fallback.model, fallback.url)) fallback = null;
+  const invoke = async selection => {
+    if (signal?.aborted) throw makeAbortError();
+    if (selection.provider === "lmstudio") return callLMStudioAI(text, selection.url, selection.model, action, [], signal, context);
+    if (!settings.geminiApiKey) throw new Error("Add your Gemini API key in the extension settings before processing text.");
+    return callGeminiAI(text, settings.geminiApiKey, action, selection.model, "", [], signal, context);
+  };
+  try {
+    return await invoke(target);
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted || !fallback) throw error;
+    onFallback?.(fallback);
+    try { return await invoke(fallback); }
+    catch (fallbackError) {
+      if (isAbortError(fallbackError)) throw fallbackError;
+      throw new Error(`Primary: ${error.message} Fallback: ${fallbackError.message}`);
+    }
+  }
+}
+
+const geminiModelCaps = new Map();
+
+async function getGeminiModelCaps(model, apiKey, signal, quotaKey) {
+  const cached = geminiModelCaps.get(model);
+  if (cached && Date.now() - cached.at < 600000) return cached.caps;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${apiKey}`, {
+    signal: signal || AbortSignal.timeout(30000)
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    if (response.status === 429) await rememberModelCooldown(quotaKey, providerRetrySeconds(response, error));
+    throw new Error(error.error?.message || "Could not check this model's token limits. No text-generation request was sent.");
+  }
+  const caps = await response.json();
+  if (![caps.inputTokenLimit, caps.outputTokenLimit].every(value => Number.isSafeInteger(value) && value > 0)) {
+    throw quotaFailure("Could not verify this model's token limits. No text-generation request was sent.");
+  }
+  geminiModelCaps.set(model, { at: Date.now(), caps });
+  return caps;
 }
 
 async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_MODEL, fallbackModel = "", history = [], signal = null, context = "") {
@@ -467,17 +645,34 @@ async function callGeminiAI(text, apiKey, action, primaryModel = DEFAULT_GEMINI_
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     try {
+      const quotaKey = modelLimitKey("gemini", model);
+      await checkModelAvailability(quotaKey);
+      const modelCaps = await getGeminiModelCaps(model, apiKey, signal, quotaKey);
+      const contents = [{ parts: [{ text: prompt }] }];
+      const countResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:countTokens?key=${apiKey}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents }), signal: signal || AbortSignal.timeout(30000)
+      });
+      if (!countResponse.ok) {
+        const countError = await countResponse.json().catch(() => ({}));
+        if (countResponse.status === 429) await rememberModelCooldown(quotaKey, providerRetrySeconds(countResponse, countError));
+        throw new Error(countError.error?.message || "Could not count tokens. No text-generation request was sent.");
+      }
+      const count = await countResponse.json();
+      const limits = await reserveModelUsage(quotaKey, count.totalTokens, signal, modelCaps);
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
+          contents,
+          generationConfig: { maxOutputTokens: limits.maxOutputTokens }
         }),
         signal: signal || AbortSignal.timeout(30000)
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        if (response.status === 429) await rememberModelCooldown(quotaKey, providerRetrySeconds(response, errData));
         throw new Error(errData.error?.message || response.statusText);
       }
 
@@ -526,6 +721,10 @@ async function callLMStudioAI(text, baseUrl, model, action, history = [], signal
   }
 
   const url = `${baseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
+  const quotaKey = modelLimitKey("lmstudio", model, baseUrl);
+  // A conservative byte count avoids understating local models' input tokens.
+  const inputTokens = new TextEncoder().encode(prompt).length + 64;
+  const limits = await reserveModelUsage(quotaKey, inputTokens, signal);
 
   const response = await fetch(url, {
     method: "POST",
@@ -534,6 +733,7 @@ async function callLMStudioAI(text, baseUrl, model, action, history = [], signal
       model: model || "",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
+      ...(limits.enabled ? { max_tokens: limits.maxOutputTokens } : {}),
       stream: false
     }),
     signal: signal || AbortSignal.timeout(30000)
@@ -541,6 +741,7 @@ async function callLMStudioAI(text, baseUrl, model, action, history = [], signal
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
+    if (response.status === 429) await rememberModelCooldown(quotaKey, providerRetrySeconds(response, errData));
     throw new Error(errData.error?.message || `LM Studio error: ${response.statusText}`);
   }
 

@@ -8,7 +8,7 @@ action set, and the same "bring your own AI" model:
 
 | | What it is | Where it runs |
 |---|---|---|
-| [`extension for browsers/`](extension%20for%20browsers/) | Chrome/Edge extension (Manifest V3) | Any website, via right-click or a keyboard shortcut |
+| [`extension for browsers/`](extension%20for%20browsers/) | WXT-powered Chrome/Edge extension (Manifest V3) | Any website, via right-click or a keyboard shortcut |
 | [`desktop-app/`](desktop-app/) | Electron app for Windows | Anywhere, via a global hotkey or a Compose window |
 
 Neither depends on the other. You can install either one, or both side by side.
@@ -40,7 +40,10 @@ Both apps expose the same actions:
 - **Custom AI Prompt** — use the selection as a one-off prompt
 
 Every action's system prompt is editable in the Prompts tab, and you can set a
-fallback Gemini model for when your primary one is at capacity.
+fallback provider and model for when your primary one fails or reaches its budget.
+Gemini can fall back to LM Studio, and LM Studio can fall back to Gemini or another
+configured local model. Fallback server/model settings are separate from primary
+settings. Existing saved Gemini fallbacks are preserved when upgrading.
 
 ---
 
@@ -48,13 +51,22 @@ fallback Gemini model for when your primary one is at capacity.
 
 ### Install from source
 
-1. Open `chrome://extensions/` and turn on **Developer mode**.
-2. Click **Load unpacked** and select the `extension for browsers/` folder.
-3. Open the extension popup and paste your Gemini API key
+1. In `extension for browsers/`, run `npm install` and `npm run build`.
+2. Open `chrome://extensions/` and turn on **Developer mode**.
+3. Click **Load unpacked** and select `extension for browsers/.output/chrome-mv3`.
+4. Open the extension popup and paste your Gemini API key
    ([get one here](https://aistudio.google.com/apikey)), or switch the provider to
    LM Studio and enter your server URL.
 
-No build step — the extension is plain HTML, CSS and JavaScript.
+After rebuilding, click **Reload** on the extension card and refresh any page where
+you want to use it. Confirm `Alt+Shift+G` is assigned at
+`chrome://extensions/shortcuts`.
+
+The browser extension is bundled with WXT. Edit the source files in
+`extension for browsers/`; the build and ZIP commands synchronize them into
+`public/` automatically. `npm run dev` also watches these source files and keeps
+the packaged scripts current. WXT reads the extension metadata from the source
+`manifest.json`.
 
 ### Using it
 
@@ -65,14 +77,19 @@ Select text in any input, textarea or editable area, then either:
 
   | Shortcut | Action |
   |---|---|
-  | `Alt+Shift+F` | Fix spelling & grammar |
-  | `Alt+Shift+G` | Fix grammar on a manual selection only |
-  | `Alt+Shift+A` | Use the selection as a custom AI prompt |
+  | `Alt+Shift+F` | Fix spelling & grammar immediately; uses the auto-select setting |
+  | `Alt+Shift+G` | Fix only the manually selected text immediately |
+  | `Alt+Shift+A` | Original Reply Assist flow with optional context |
+  | `Alt+Shift+R` | Additional review panel, with or without selected text |
 
   Rebind them at `chrome://extensions/shortcuts`.
 
-The result replaces your selection in place. A toast in the bottom-right corner shows
-progress and lets you cancel a running request or retry with a different model.
+The original shortcuts and right-click writing actions keep their original
+processing and replacement behavior. The additional review panel opens with
+`Alt+Shift+R` or **AI Text Tools → Review before applying…**. It shows your text
+and an editable result before anything is applied. With no selection, it still
+opens so you can type or paste text. Choose **Done & copy** to copy the result
+and replace the selected text or insert it at the focused editor's cursor.
 
 ### Cancelling a request
 
@@ -80,7 +97,7 @@ Press `Alt+Shift+Esc` while a request is running — or click the ✕ on the toa
 abort it. Your text is left exactly as you wrote it; nothing is replaced and nothing is
 added to history.
 
-Unlike the three shortcuts above, this one is not registered through
+Unlike the four shortcuts above, this one is not registered through
 `chrome.commands`, because Chrome reserves `Esc` and will not bind it. It is handled by
 the content script instead, which has two consequences: it only fires while the page
 itself has focus (not while you are typing in the address bar or another window), and
@@ -91,34 +108,65 @@ rebound there.
 
 ```
 extension for browsers/
-  manifest.json     — MV3 manifest: permissions, commands, icons
-  background.js     — Service worker: context menus, shortcuts, provider API calls
-  content.js        — Injected on demand: selection handling, text replacement, toast + panels
-  constants.js      — Shared defaults: prompts, action labels, Gemini model list
-  popup.html/.js    — Popup: Settings / History / Prompts / Shortcuts tabs
-  popup.css         — shadcn/ui-style design tokens and component classes
+  wxt.config.ts     — WXT-generated MV3 manifest and permissions
+  entrypoints/      — WXT background worker
+  public/           — Settings popup, content script, icons, shared prompts and provider logic
   store/            — Chrome Web Store listing copy, privacy policy, permission rationale
   zip-extension.sh  — Builds the upload package
 landing-page/       — Public site + hosted privacy policy (GitHub Pages)
 ```
 
-Settings and prompts save automatically as you edit them; history keeps the last 50
+### Model limits
+
+Settings → Model limits includes an **Enable custom budget limits** switch.
+New setups work without manual budget configuration. Existing saved budgets
+remain enabled when upgrading; turn the switch off to stop enforcing them.
+Profiles and usage counters remain saved when disabled.
+
+Gemini's input/output maximums load automatically with your API key. Google no
+longer publishes a universal free-tier RPM/TPM/RPD table in its rate-limit docs;
+your project's active rates are shown in
+[Google AI Studio](https://aistudio.google.com/rate-limit?timeRange=last-28-days).
+To enable personal budgets, copy those rates (or smaller caps) for each primary
+and fallback model. Missing profiles block requests only while budgets are on.
+
+When enabled, the extension enforces requests per minute/day, input tokens per minute, an
+optional daily input-token cap, and per-request input/output caps. Gemini token
+counts include the full prompt and any context. Gemini's actual input/output
+maximums are fetched automatically and override larger personal caps. Local
+models use a conservative text-size estimate; set their input cap below the
+loaded context window, leaving room for output.
+
+Reservations are saved before generation, so concurrent requests, retries,
+worker restarts, and failed attempts cannot bypass the configured budgets.
+Daily budgets reset at midnight Pacific time. Gemini's actual model token caps
+and provider rate-limit cooldowns remain active even with custom budgets off.
+Local models use their server's output defaults when budgets are off.
+
+Usage covers this extension on this browser only. Google quotas are shared
+across the project; calls from other apps or browsers are not visible here.
+These settings do not impose an account-wide spending limit. If the provider
+quota is unlimited, choose a personal cap.
+
+Settings and prompts save automatically as you edit them; model limits use an
+explicit Save button after all fields are valid. History keeps the last 50
 edits plus all-time totals, and can be cleared from the History tab.
 
 There is no content script registered on `<all_urls>`. Nothing runs on a page at load
-time — `content.js` is injected into a single tab via `activeTab` + `chrome.scripting`
-only at the moment you trigger an action there.
+time — `content.js` is injected into the active tab via `activeTab` + `chrome.scripting`
+only when you trigger an action. The refine panel runs in an isolated shadow root on
+that page, so the site's styles cannot leak into it.
 
 ### Publishing to the Chrome Web Store
 
 ```sh
 cd "extension for browsers"
-bash zip-extension.sh        # → fix-errors-ai-v<version>.zip
+npm run zip                  # → WXT-built Chrome package
 ```
 
-The version comes from `manifest.json`; bump it before every upload, since the Web
+The version comes from `manifest.json`; bump it and the package version before every upload, since the Web
 Store rejects a package that is not newer than the published one. `store/` and the
-script itself are excluded from the archive.
+source files are excluded from the built archive.
 
 Listing copy, the privacy policy text and the per-permission justifications live in
 [`extension for browsers/store/`](extension%20for%20browsers/store/) — start with

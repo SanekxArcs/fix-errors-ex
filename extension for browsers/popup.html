@@ -7,8 +7,8 @@
   </head>
   <body>
     <header class="app-header">
-      <img src="icons/icon16.png" alt="" />
-      <h1>Fix Errors AI</h1>
+      <span class="brand-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#152445" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 15l2 2 5-5"/></svg></span>
+      <div class="brand-copy"><h1>Fix Errors AI</h1><span>AI writing workspace</span></div>
       <div class="header-actions">
         <span id="save-indicator" class="save-indicator" role="status" aria-live="polite" hidden></span>
         <span id="app-version" class="badge badge-outline">v1.7.0</span>
@@ -60,13 +60,9 @@
               A Gemini API key is required before text can be processed.
             </p>
           </div>
-          <div class="field">
+          <div class="field" id="gemini-model-field">
             <label class="label" for="modelSelect">Primary Model</label>
             <select id="modelSelect" class="select"></select>
-          </div>
-          <div class="field">
-            <label class="label" for="fallbackModelSelect">Fallback Model (Optional)</label>
-            <select id="fallbackModelSelect" class="select"></select>
           </div>
         </div>
       </div>
@@ -84,8 +80,63 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-content">
+          <div class="field">
+            <label class="label" for="fallbackProviderSelect">Fallback provider</label>
+            <select id="fallbackProviderSelect" class="select">
+              <option value="none">None</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="lmstudio">LM Studio (Local)</option>
+            </select>
+          </div>
+          <div class="field" id="fallback-gemini-section" hidden>
+            <label class="label" for="fallbackModelSelect">Fallback model</label>
+            <select id="fallbackModelSelect" class="select"></select>
+          </div>
+          <div id="fallback-lmstudio-section" hidden>
+            <div class="field"><label class="label" for="fallbackLmStudioUrl">Fallback server URL</label><input id="fallbackLmStudioUrl" class="input" type="text" placeholder="http://localhost:1234" /></div>
+            <div class="field"><label class="label" for="fallbackLmStudioModel">Fallback model identifier</label><input id="fallbackLmStudioModel" class="input" type="text" placeholder="Use the model loaded on the server" /></div>
+          </div>
+          <p class="text-muted">Used when the primary model fails or reaches its budget. If custom budgets are enabled, configure the fallback budget too.</p>
+        </div>
+      </div>
       <hr class="separator" />
 
+      <div class="section-heading">
+        <span class="section-title">Model limits</span>
+        <span class="text-muted">Automatic model checks, optional personal budgets.</span>
+      </div>
+      <div class="card">
+        <form id="model-limits-form" class="card-content">
+          <div class="switch-row">
+            <label class="label" for="model-limits-enabled">Enable custom budget limits</label>
+            <input id="model-limits-enabled" type="checkbox" class="switch" />
+          </div>
+          <p class="text-muted">Turn off to use models without setting personal budgets. Provider limits and rate-limit cooldowns still apply.</p>
+          <div class="field">
+            <label class="label" for="limits-model">Model to configure</label>
+            <select id="limits-model" class="select"></select>
+          </div>
+          <p id="limits-automatic" class="text-muted" role="status" aria-live="polite"></p>
+          <p class="text-muted" id="limits-help">Gemini's model input/output limits load automatically with your API key. Google does not publish one universal free-tier rate table: copy your project's active rates from <a href="https://aistudio.google.com/rate-limit?timeRange=last-28-days" target="_blank" rel="noopener noreferrer">Google AI Studio</a> if you enable custom budgets.</p>
+          <p class="text-muted" id="limits-local-help" hidden>Use personal budgets for your local server. Token usage is estimated conservatively from text size. Set max input below the loaded context window, leaving room for the output cap. A different server-default model needs its limits updated here.</p>
+          <div class="limits-grid" id="limits-custom-fields">
+            <div class="field"><label class="label" for="limit-rpm">Requests / minute</label><input id="limit-rpm" class="input" type="number" min="1" step="1" required /></div>
+            <div class="field"><label class="label" for="limit-rpd">Requests / day</label><input id="limit-rpd" class="input" type="number" min="1" step="1" required /></div>
+            <div class="field"><label class="label" for="limit-tpm">Input tokens / minute</label><input id="limit-tpm" class="input" type="number" min="1" step="1" required /></div>
+            <div class="field"><label class="label" for="limit-tpd">Input tokens / day</label><input id="limit-tpd" class="input" type="number" min="0" step="1" placeholder="Optional" /></div>
+            <div class="field"><label class="label" for="limit-maxInputTokens">Max input / request</label><input id="limit-maxInputTokens" class="input" type="number" min="1" step="1" required /></div>
+            <div class="field"><label class="label" for="limit-maxOutputTokens">Max output / reply</label><input id="limit-maxOutputTokens" class="input" type="number" min="1" step="1" required /></div>
+          </div>
+          <p id="limits-usage" class="text-muted" role="status" aria-live="polite"></p>
+          <p class="text-muted">Counts cover this extension on this browser only, including prompts and context. Other apps may share your project quota. Daily budgets reset at midnight Pacific time. Failed attempts count too. For unlimited provider quotas, choose a personal cap; leave daily tokens blank to disable that cap.</p>
+          <p id="limits-error" class="field-error" role="alert" hidden></p>
+          <button id="save-model-limits" class="btn btn-primary" type="submit">Save custom budget</button>
+        </form>
+      </div>
+
+      <hr class="separator" />
       <div class="section-heading">
         <span class="section-title">General</span>
         <span class="text-muted">Behaviour when you trigger an action.</span>
@@ -94,13 +145,8 @@
       <div class="card">
         <div class="card-content">
           <div class="switch-row">
-            <label class="label" for="autoSelectAll">Auto-select the whole field (Alt+Shift+F)</label>
+            <label class="label" for="autoSelectAll">Auto-select the whole field (<span id="shortcut-autoselect-label">Alt+Shift+F</span>)</label>
             <input type="checkbox" id="autoSelectAll" class="switch" />
-          </div>
-          <hr class="separator" />
-          <div class="switch-row">
-            <label class="label" for="includeContext">Include context (experimental)</label>
-            <input type="checkbox" id="includeContext" class="switch" />
           </div>
         </div>
       </div>
@@ -167,13 +213,18 @@
           </div>
           <hr class="separator" />
           <div class="switch-row">
-            <span class="label">Fix selected text</span>
+            <span class="label">Fix selected text immediately</span>
             <span id="shortcut-fix-selected" class="kbd">Alt+Shift+G</span>
           </div>
           <hr class="separator" />
           <div class="switch-row">
-            <span class="label">Custom AI Prompt</span>
+            <span class="label">Reply Assist</span>
             <span id="shortcut-ai-prompt" class="kbd">Alt+Shift+A</span>
+          </div>
+          <hr class="separator" />
+          <div class="switch-row">
+            <span class="label">Review before applying (selection optional)</span>
+            <span id="shortcut-open-refine" class="kbd">Alt+Shift+R</span>
           </div>
         </div>
       </div>
@@ -188,9 +239,8 @@
       </div>
     </div>
 
-    <div id="popup-toast" role="status" aria-live="polite"></div>
-
     <script src="constants.js"></script>
+    <script src="model-limits.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

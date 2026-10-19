@@ -1,15 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Fix Errors AI",
-  "version": "1.8.2",
+  "version": "2.0.12",
   "description": "Fix grammar, change tone, translate, or reply to messages on any site using AI — right from the right-click menu.",
-  "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting",
+    "clipboardWrite"
+  ],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],
   "action": {
+    "default_title": "Fix Errors AI",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -26,21 +33,28 @@
         "default": "Alt+Shift+F",
         "mac": "Alt+Shift+F"
       },
-      "description": "Fix typos and grammar of selected text"
+      "description": "Fix spelling & grammar"
     },
     "fix_selected": {
       "suggested_key": {
         "default": "Alt+Shift+G",
         "mac": "Alt+Shift+G"
       },
-      "description": "Fix grammar of manually selected text only (ignores auto-select setting)"
+      "description": "Fix selected text immediately"
     },
     "ai_prompt": {
       "suggested_key": {
         "default": "Alt+Shift+A",
         "mac": "Alt+Shift+A"
       },
-      "description": "Use selected text as an AI prompt and replace with the result"
+      "description": "Reply Assist"
+    },
+    "open_refine": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
+      },
+      "description": "Review before applying (selection optional)"
     }
   },
   "icons": {

@@ -1,0 +1,1054 @@
+if (!window.lbxFixErrorsInjected) {
+  window.lbxFixErrorsInjected = true;
+
+  // Stores the selection/focus state captured at the moment Alt+Shift+A is pressed,
+  // so we can restore it after the AI panel has stolen focus.
+  let savedSelectionInfo = null;
+
+  // True while a request is running, i.e. while the "working" toast is up. Gates
+  // the Alt+Shift+Esc cancel shortcut so it never swallows a plain Escape.
+  let aiInProgress = false;
+  let cancelCurrentReview = null;
+
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "replaceText") {
+      const { originalText, fixedText } = request;
+      try {
+        replaceSelectedText(originalText, fixedText);
+        sendResponse({ status: "done", replaced: true });
+      } catch (error) {
+        sendResponse({ replaced: false, error: error.message });
+      }
+    } else if (request.action === "dismissReview") {
+      cancelCurrentReview?.();
+      sendResponse({ status: "done" });
+    } else if (request.action === "restoreSelection") {
+      restoreSavedSelection();
+      sendResponse({ status: "done" });
+    } else if (request.action === "showToast") {
+      showToast(request.message, request.type);
+      if (sendResponse) sendResponse({ status: "done" });
+    } else if (request.action === "showReplyAssistModal") {
+      showReplyAssistPanel(request.selectedText);
+      if (sendResponse) sendResponse({ status: "done" });
+    } else if (request.action === "openReviewPanel") {
+      showInlineReviewPanel(request);
+      if (sendResponse) sendResponse({ status: "done" });
+    } else if (request.action === "showRetryableError") {
+      const { message, fallbackModel, models } = request;
+      if (fallbackModel) {
+        showToast(message, "error", {
+          retryLabel: "Retry",
+          onRetry: () => chrome.runtime.sendMessage({ action: "retryAI", model: fallbackModel })
+        });
+      } else {
+        showToast(message, "error", {
+          retryLabel: "Choose model",
+          onRetry: () => {
+            chrome.runtime.sendMessage({ action: "retryPickerOpened" });
+            showModelPickerPanel(models);
+          }
+        });
+      }
+      if (sendResponse) sendResponse({ status: "done" });
+    } else if (request.action === "getSelection") {
+      const activeElement = deepActiveElement();
+      if (document.getElementById("lbx-inline-review")?.contains(document.activeElement) && savedSelectionInfo) {
+        sendResponse({ text: savedSelectionInfo.text, hadEditableTarget: savedSelectionInfo.type !== "selection" });
+        return false;
+      }
+      const editable = isEditableElement(activeElement);
+      if (request.autoSelectAll && editable) {
+        if (isTextInput(activeElement)) {
+          activeElement.select();
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(activeElement);
+          const selection = getSelectionFor(activeElement);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+
+      // Chat apps (Slack, Teams, etc.) often render an @mention as an atomic chip
+      // element rather than plain text. If one sits at the edge of the selection,
+      // shrink the selection to exclude it so it's never touched by the replace step.
+      let leadingText = "", trailingText = "";
+      const selection = getSelectionFor(activeElement);
+      if (selection.rangeCount > 0 && activeElement && activeElement.isContentEditable) {
+        const range = selection.getRangeAt(0);
+        const edges = excludeEdgeAtomicNodes(range);
+        leadingText = edges.leadingText;
+        trailingText = edges.trailingText;
+        if (leadingText || trailingText) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+
+      const text = isTextInput(activeElement)
+        ? activeElement.value.substring(activeElement.selectionStart, activeElement.selectionEnd)
+        : getSelectionFor(activeElement).toString();
+      saveCurrentSelection(text);
+      // hadEditableTarget lets the background tell "nothing was selected" apart
+      // from "auto-select had no text field to work with", so the toast can say
+      // which one it was instead of the shortcut failing silently.
+      if (sendResponse) sendResponse({ text, leadingText, trailingText, hadEditableTarget: editable });
+    }
+    return true;
+  });
+
+  // document.activeElement stops at a shadow host, so on sites that build their
+  // editor as a web component it reports the wrapper rather than the field the
+  // caret is actually in. Walk down through open shadow roots to the real one.
+  function deepActiveElement() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
+  function isEditableElement(el) {
+    if (!el) return false;
+    return isTextInput(el) || el.isContentEditable;
+  }
+
+  function isTextInput(el) {
+    return Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA") && typeof el.selectionStart === "number");
+  }
+
+  // A selection inside a shadow root lives on that root, not on the document.
+  function getSelectionFor(el) {
+    const root = el && el.getRootNode ? el.getRootNode() : null;
+    if (root && root.getSelection) return root.getSelection();
+    return window.getSelection();
+  }
+
+  // A real mention/hashtag/emoji chip is a small inline element — never a block
+  // wrapper that likely holds the entire message (which would empty the selection).
+  function isLikelyAtomicChip(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    if (node.tagName === "DIV" || node.tagName === "P" || node.tagName === "SECTION" || node.tagName === "ARTICLE") {
+      return false;
+    }
+    return (node.textContent || "").trim().length <= 60;
+  }
+
+  // Walks down from the range boundary's immediate child through block wrappers
+  // (e.g. Slack wraps a message in <p>) to find the actual edge node — a leaf or
+  // an atomic chip — instead of stopping at the wrapper itself.
+  function deepEdgeNode(container, offset, direction) {
+    let node = direction === "start" ? container.childNodes[offset] : container.childNodes[offset - 1];
+    while (node && node.nodeType === Node.ELEMENT_NODE && node.childNodes.length && !isLikelyAtomicChip(node)) {
+      node = direction === "start" ? node.firstChild : node.lastChild;
+    }
+    return node;
+  }
+
+  // Shrinks a Range so a leading/trailing atomic chip is excluded (left in the DOM
+  // untouched). Returns the excluded chip text so callers can still show/log the
+  // full message. Reverts if excluding the edges would leave nothing to fix.
+  function excludeEdgeAtomicNodes(range) {
+    if (range.collapsed) return { leadingText: "", trailingText: "" };
+
+    const originalStart = { container: range.startContainer, offset: range.startOffset };
+    const originalEnd = { container: range.endContainer, offset: range.endOffset };
+    let leadingText = "";
+    let trailingText = "";
+
+    if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+      const node = deepEdgeNode(range.startContainer, range.startOffset, "start");
+      if (isLikelyAtomicChip(node)) {
+        leadingText = node.textContent || "";
+        range.setStartAfter(node);
+      }
+    }
+
+    if (!range.collapsed && range.endContainer.nodeType === Node.ELEMENT_NODE) {
+      const node = deepEdgeNode(range.endContainer, range.endOffset, "end");
+      if (isLikelyAtomicChip(node)) {
+        trailingText = node.textContent || "";
+        range.setEndBefore(node);
+      }
+    }
+
+    if (!range.toString().trim() && (leadingText || trailingText)) {
+      range.setStart(originalStart.container, originalStart.offset);
+      range.setEnd(originalEnd.container, originalEnd.offset);
+      return { leadingText: "", trailingText: "" };
+    }
+
+    return { leadingText, trailingText };
+  }
+
+  // Capture the current selection state before showing the panel.
+  // Must be called synchronously before any focus change occurs.
+  function saveCurrentSelection(selectedText) {
+    const activeElement = deepActiveElement();
+
+    if (isTextInput(activeElement)) {
+      savedSelectionInfo = {
+        type: "input",
+        element: activeElement,
+        start: activeElement.selectionStart,
+        end: activeElement.selectionEnd,
+        value: activeElement.value,
+        text: selectedText
+      };
+    } else if (activeElement && activeElement.isContentEditable) {
+      const sel = getSelectionFor(activeElement);
+      savedSelectionInfo = {
+        type: "contenteditable",
+        element: activeElement,
+        range: sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null,
+        text: selectedText
+      };
+    } else {
+      const sel = window.getSelection();
+      savedSelectionInfo = {
+        type: "selection",
+        range: sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null,
+        text: selectedText
+      };
+    }
+  }
+
+  function restoreSavedSelection() {
+    const info = savedSelectionInfo;
+    if (!info) return;
+    if (info.element?.isConnected) info.element.focus();
+    if (info.type === "input" && info.element?.isConnected) {
+      info.element.setSelectionRange(info.start, info.end);
+    } else if (info.range?.startContainer.isConnected && info.range?.endContainer.isConnected) {
+      const selection = getSelectionFor(info.element);
+      selection.removeAllRanges();
+      selection.addRange(info.range);
+    }
+  }
+
+  // ── Injected UI ─────────────────────────────────────────────────────────
+  // The toast and panels below follow the shadcn/ui design language (slate base,
+  // blue accent, 0.5rem radius), but are written as inline styles rather than a
+  // stylesheet so no host-page CSS can bleed into them.
+  const UI = {
+    bg: "#020817",
+    subtle: "#0b1324",
+    fg: "#f8fafc",
+    muted: "#1e293b",
+    mutedHover: "#273549",
+    mutedFg: "#94a3b8",
+    border: "#1e293b",
+    primary: "#3b82f6",
+    primaryHover: "#5b9bf8",
+    primaryFg: "#0f172a",
+    destructive: "#f87171",
+    success: "#4ade80",
+    font: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    shadow: "0 10px 15px -3px rgba(0,0,0,0.45), 0 4px 6px -4px rgba(0,0,0,0.45)"
+  };
+
+  // Lucide icons — the same set shadcn/ui ships with.
+  const ICON = {
+    x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    alert: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    spinner: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="animation: lbx-spin 0.8s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+    rotate: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1.06 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
+  };
+
+  // Keyframes can't live in an inline style attribute, so inject them once under
+  // a prefixed name that won't collide with anything on the host page.
+  function ensureKeyframes() {
+    if (document.getElementById("lbx-ai-keyframes")) return;
+    const style = document.createElement("style");
+    style.id = "lbx-ai-keyframes";
+    style.textContent = "@keyframes lbx-spin{to{transform:rotate(360deg)}}";
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  // shadcn button variants/sizes, expressed as inline style strings.
+  const BUTTON_VARIANTS = {
+    primary: { base: UI.primary, fg: UI.primaryFg, hover: UI.primaryHover, border: "transparent" },
+    secondary: { base: UI.muted, fg: UI.fg, hover: UI.mutedHover, border: "transparent" },
+    outline: { base: "transparent", fg: UI.fg, hover: UI.muted, border: UI.border },
+    ghost: { base: "transparent", fg: UI.mutedFg, hover: UI.muted, border: "transparent" },
+    translucent: { base: "rgba(255,255,255,0.10)", fg: UI.fg, hover: "rgba(255,255,255,0.18)", border: "transparent" }
+  };
+
+  const BUTTON_SIZES = {
+    default: "height:30px;padding:0 12px;font-size:12px;",
+    sm: "height:26px;padding:0 10px;font-size:11.5px;",
+    icon: "height:24px;width:24px;padding:0;"
+  };
+
+  function makeButton(label, { variant = "secondary", size = "default", icon = "", title = "" } = {}) {
+    const v = BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.secondary;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (title) btn.title = title;
+    btn.innerHTML = icon + (label ? `<span>${label}</span>` : "");
+    alignInjectedIcons(btn);
+    btn.style.cssText = `
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      ${BUTTON_SIZES[size] || BUTTON_SIZES.default}
+      border:1px solid ${v.border};
+      border-radius:6px;
+      background:${v.base};
+      color:${v.fg};
+      font-family:${UI.font};
+      font-weight:500;
+      line-height:1;
+      white-space:nowrap;
+      cursor:pointer;
+      pointer-events:auto;
+      transition:background-color .15s, color .15s, border-color .15s;
+    `;
+    btn.onmouseover = () => {
+      btn.style.background = v.hover;
+      if (variant === "ghost" || variant === "outline") btn.style.color = UI.fg;
+    };
+    btn.onmouseout = () => {
+      btn.style.background = v.base;
+      btn.style.color = v.fg;
+    };
+    return btn;
+  }
+
+  function alignInjectedIcons(container) {
+    for (const icon of container.querySelectorAll("svg")) {
+      icon.style.cssText += `;position:static;display:block;float:none;flex:0 0 auto;margin:0;padding:0;width:${icon.getAttribute("width") || 14}px;height:${icon.getAttribute("height") || 14}px;max-width:none;max-height:none;fill:none;stroke:currentColor;`;
+    }
+  }
+
+  function makeLabel(text) {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = `font-size:11.5px;font-weight:500;line-height:1.3;color:${UI.fg};margin-bottom:6px;`;
+    return el;
+  }
+
+  function makeKbd(text) {
+    const el = document.createElement("span");
+    el.textContent = text;
+    el.style.cssText = `
+      display:inline-flex;
+      align-items:center;
+      padding:1px 5px;
+      border:1px solid ${UI.border};
+      border-radius:4px;
+      background:${UI.muted};
+      color:${UI.mutedFg};
+      font-family:${UI.mono};
+      font-size:10px;
+      line-height:1.5;
+    `;
+    return el;
+  }
+
+  // Aborts the running request and leaves the selected text untouched. Shared by
+  // the toast's cancel button and the Alt+Shift+Esc shortcut.
+  function cancelActiveJob() {
+    chrome.runtime.sendMessage({ action: "cancelAI" });
+    showToast("Cancelling...", "info");
+  }
+
+  // Alt+Shift+Esc cancels a running request. This can't be a chrome.commands
+  // shortcut — Chrome reserves Escape and won't bind it — so it's a page-level
+  // listener instead, which means it works while the page has focus.
+  //
+  // Capture phase + stopPropagation so it fires before the Reply Assist and
+  // model-picker panels, which close on a bare Escape.
+  document.addEventListener("keydown", (e) => {
+    if (!aiInProgress && !cancelCurrentReview) return;
+    if (e.key !== "Escape" && e.code !== "Escape") return;
+    if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (cancelCurrentReview) cancelCurrentReview();
+    else cancelActiveJob();
+  }, true);
+
+  // Sonner-style toast: neutral popover surface with a coloured status icon,
+  // rather than a fully colour-flooded bar.
+  function showToast(message, type = "info", options = {}) {
+    ensureKeyframes();
+    aiInProgress = type === "working";
+
+    const toastId = "lbx-ai-toast";
+    let toast = document.getElementById(toastId);
+
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = toastId;
+      document.body.appendChild(toast);
+    }
+
+    // A toast that is on its way out is being reused: cancel both the fade and
+    // the removal so it doesn't disappear while showing the new message.
+    clearTimeout(toast._hideTimer);
+    clearTimeout(toast._removeTimer);
+
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 360px;
+      padding: 11px 13px;
+      border: 1px solid ${UI.border};
+      border-radius: 10px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      box-shadow: ${UI.shadow};
+      z-index: 1000000;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity .25s ease, transform .25s cubic-bezier(0.32, 0.72, 0, 1);
+      pointer-events: none;
+    `;
+
+    const statuses = {
+      working: { icon: ICON.spinner, color: UI.primary },
+      success: { icon: ICON.check, color: UI.success },
+      error: { icon: ICON.alert, color: UI.destructive },
+      info: { icon: ICON.info, color: UI.mutedFg }
+    };
+    const status = statuses[type] || statuses.info;
+
+    toast.innerHTML = "";
+    // The toast itself never intercepts clicks; only its buttons do.
+
+    const iconWrap = document.createElement("span");
+    iconWrap.innerHTML = status.icon;
+    alignInjectedIcons(iconWrap);
+    iconWrap.style.cssText = `display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px;height:14px;color:${status.color};`;
+    toast.appendChild(iconWrap);
+
+    const textSpan = document.createElement("span");
+    textSpan.innerText = message;
+    textSpan.style.cssText = "flex:1;min-width:0;";
+    toast.appendChild(textSpan);
+
+    if (type === "working") {
+      const kbd = makeKbd("Alt+Shift+Esc");
+      kbd.style.flexShrink = "0";
+      kbd.title = "Cancel without changing your text";
+      toast.appendChild(kbd);
+
+      const cancelBtn = makeButton("", {
+        variant: "ghost",
+        size: "icon",
+        icon: ICON.x,
+        title: "Cancel (Alt+Shift+Esc)"
+      });
+      cancelBtn.style.marginLeft = "2px";
+      cancelBtn.onclick = cancelActiveJob;
+      toast.appendChild(cancelBtn);
+    }
+
+    if (options.onRetry) {
+      const retryBtn = makeButton(options.retryLabel || "Retry", {
+        variant: "secondary",
+        size: "sm",
+        icon: ICON.rotate
+      });
+      retryBtn.style.marginLeft = "2px";
+      retryBtn.onclick = () => {
+        hideToast(toast);
+        options.onRetry();
+      };
+      toast.appendChild(retryBtn);
+
+      // Retry notices can also be dismissed before their timeout.
+      const closeBtn = makeButton("", {
+        variant: "ghost",
+        size: "icon",
+        icon: ICON.x,
+        title: "Dismiss"
+      });
+      closeBtn.style.marginLeft = "2px";
+      closeBtn.onclick = () => hideToast(toast);
+      toast.appendChild(closeBtn);
+    }
+
+    // Retry notices allow more time, but always expire.
+    if (type !== "working") {
+      toast._hideTimer = setTimeout(() => hideToast(toast), options.onRetry ? 15000 : 4000);
+    } else if (type === "working") {
+      // Safety net: if the background worker dies mid-request no final toast
+      // ever arrives, and the "working" toast would stay up indefinitely.
+      toast._hideTimer = setTimeout(() => {
+        aiInProgress = false;
+        hideToast(toast);
+      }, 90000);
+    }
+  }
+
+  // Dismissed notices leave the DOM immediately, including their buttons.
+  function hideToast(toast) {
+    toast = toast || document.getElementById("lbx-ai-toast");
+    if (!toast) return;
+    clearTimeout(toast._hideTimer);
+    clearTimeout(toast._removeTimer);
+    toast.remove();
+  }
+
+  // Command-menu style popover listing the models available for a retry.
+  function showModelPickerPanel(models) {
+    const existing = document.getElementById("lbx-model-picker-panel");
+    if (existing) existing._dismiss();
+
+    const panel = document.createElement("div");
+    panel.id = "lbx-model-picker-panel";
+    panel.style.cssText = `
+      position: fixed;
+      bottom: 76px;
+      right: 20px;
+      width: 290px;
+      border: 1px solid ${UI.border};
+      border-radius: 10px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      box-shadow: ${UI.shadow};
+      z-index: 1000002;
+      overflow: hidden;
+    `;
+
+    const header = document.createElement("div");
+    header.textContent = "Retry with model";
+    header.style.cssText = `
+      padding: 9px 12px 8px;
+      border-bottom: 1px solid ${UI.border};
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: ${UI.mutedFg};
+    `;
+
+    const list = document.createElement("div");
+    list.style.cssText = "padding:4px;max-height:260px;overflow-y:auto;";
+
+    models.forEach(m => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = m.label;
+      btn.style.cssText = `
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 7px 9px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: ${UI.mutedFg};
+        font-family: inherit;
+        font-size: 12px;
+        line-height: 1.35;
+        cursor: pointer;
+        transition: background-color .12s, color .12s;
+      `;
+      btn.onmouseover = () => { btn.style.background = UI.muted; btn.style.color = UI.fg; };
+      btn.onmouseout = () => { btn.style.background = "transparent"; btn.style.color = UI.mutedFg; };
+      btn.onclick = () => {
+        panel._dismiss();
+        chrome.runtime.sendMessage({ action: "retryAI", model: m.id, provider: m.provider });
+      };
+      list.appendChild(btn);
+    });
+
+    panel.appendChild(header);
+    panel.appendChild(list);
+    document.body.appendChild(panel);
+
+    const closeOnOutside = event => { if (!panel.contains(event.target)) panel._dismiss(); };
+    const closeOnEscape = event => { if (event.key === "Escape") panel._dismiss(); };
+    let attachTimer, expiryTimer;
+    panel._dismiss = () => {
+      clearTimeout(attachTimer); clearTimeout(expiryTimer);
+      document.removeEventListener("click", closeOnOutside, true);
+      document.removeEventListener("keydown", closeOnEscape, true);
+      panel.remove();
+    };
+    attachTimer = setTimeout(() => document.addEventListener("click", closeOnOutside, true), 100);
+    document.addEventListener("keydown", closeOnEscape, true);
+    expiryTimer = setTimeout(panel._dismiss, 15000);
+  }
+
+  // Non-blocking bottom-right panel — page stays interactive while open.
+  // Selection is saved before rendering so focus change doesn't matter.
+  function showReplyAssistPanel(selectedText) {
+    // Capture selection state NOW, before any focus change
+    saveCurrentSelection(selectedText);
+
+    const existing = document.getElementById("lbx-reply-assist-panel");
+    if (existing) existing.remove();
+
+    const panel = document.createElement("div");
+    panel.id = "lbx-reply-assist-panel";
+    panel.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 340px;
+      border: 1px solid ${UI.border};
+      border-radius: 12px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: ${UI.font};
+      box-shadow: ${UI.shadow};
+      z-index: 1000001;
+      overflow: hidden;
+    `;
+
+    // Header
+    const header = document.createElement("div");
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px 11px;
+      border-bottom: 1px solid ${UI.border};
+    `;
+
+    const titleWrap = document.createElement("div");
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = "Reply Assist";
+    titleEl.style.cssText = `font-size:13.5px;font-weight:600;letter-spacing:-0.01em;color:${UI.fg};`;
+
+    const descEl = document.createElement("div");
+    descEl.textContent = "Refine the selected text in context.";
+    descEl.style.cssText = `font-size:11.5px;color:${UI.mutedFg};margin-top:2px;`;
+
+    titleWrap.appendChild(titleEl);
+    titleWrap.appendChild(descEl);
+
+    const closeBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Close" });
+
+    header.appendChild(titleWrap);
+    header.appendChild(closeBtn);
+
+    // Body
+    const body = document.createElement("div");
+    body.style.cssText = "padding:12px 14px 12px;";
+
+    const preview = document.createElement("div");
+    const previewText = selectedText.length > 90 ? selectedText.slice(0, 90) + "…" : selectedText;
+    preview.textContent = previewText;
+    preview.style.cssText = `
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      border: 1px solid ${UI.border};
+      border-left: 2px solid ${UI.primary};
+      border-radius: 6px;
+      background: ${UI.subtle};
+      color: ${UI.mutedFg};
+      font-size: 11.5px;
+      line-height: 1.5;
+      word-break: break-word;
+    `;
+
+    const textarea = document.createElement("textarea");
+    textarea.placeholder = "Paste conversation, describe tone, or add instructions…";
+    textarea.rows = 3;
+    textarea.style.cssText = `
+      width: 100%;
+      min-height: 68px;
+      padding: 8px 10px;
+      border: 1px solid ${UI.border};
+      border-radius: 6px;
+      background: ${UI.bg};
+      color: ${UI.fg};
+      font-family: inherit;
+      font-size: 12.5px;
+      line-height: 1.5;
+      resize: vertical;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    `;
+    textarea.addEventListener("focus", () => {
+      textarea.style.borderColor = UI.primary;
+      textarea.style.boxShadow = `0 0 0 1px ${UI.primary}`;
+    });
+    textarea.addEventListener("blur", () => {
+      textarea.style.borderColor = UI.border;
+      textarea.style.boxShadow = "none";
+    });
+
+    body.appendChild(makeLabel("Refining"));
+    body.appendChild(preview);
+    body.appendChild(makeLabel("Context (optional)"));
+    body.appendChild(textarea);
+
+    // Footer
+    const footer = document.createElement("div");
+    footer.style.cssText = `
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 11px 14px 13px;
+      border-top: 1px solid ${UI.border};
+    `;
+
+    const hint = document.createElement("div");
+    hint.style.cssText = "display:flex;align-items:center;gap:4px;margin-right:auto;";
+    hint.appendChild(makeKbd("Ctrl+↵"));
+    hint.appendChild(makeKbd("Esc"));
+
+    const cancelBtn = makeButton("Cancel", { variant: "outline" });
+    const refineBtn = makeButton("Refine", { variant: "primary" });
+
+    function submit() {
+      const context = textarea.value.trim();
+      panel.remove();
+      chrome.runtime.sendMessage({ action: "replyAssistSubmit", selectedText, context });
+    }
+
+    function cancel() {
+      savedSelectionInfo = null;
+      panel.remove();
+    }
+
+    refineBtn.onclick = submit;
+    cancelBtn.onclick = cancel;
+    closeBtn.onclick = cancel;
+
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
+    });
+
+    footer.appendChild(hint);
+    footer.appendChild(cancelBtn);
+    footer.appendChild(refineBtn);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    panel.appendChild(footer);
+    document.body.appendChild(panel);
+
+    // Focus the textarea so the user can type right away.
+    // The selection is already saved above, so this focus change is safe.
+    setTimeout(() => textarea.focus(), 50);
+  }
+
+  // When a selection boundary sits immediately next to an inline element (e.g. a
+  // Slack @mention chip left in place by excludeEdgeAtomicNodes),
+  // execCommand("insertText") tends to type INTO that element instead of beside
+  // it, corrupting the chip. Insert a tiny real text-node buffer via direct DOM
+  // ops (not Range) so the caret unambiguously lands in plain text first.
+  function bufferAwayFromAdjacentElement(range) {
+    const wasCollapsed = range.collapsed;
+
+    if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+      const prev = range.startContainer.childNodes[range.startOffset - 1];
+      if (prev && prev.nodeType === Node.ELEMENT_NODE) {
+        const buffer = document.createTextNode("\u200B");
+        range.startContainer.insertBefore(buffer, range.startContainer.childNodes[range.startOffset] || null);
+        range.setStart(buffer, 1);
+        if (wasCollapsed) range.setEnd(buffer, 1);
+      }
+    }
+
+    if (!wasCollapsed && range.endContainer.nodeType === Node.ELEMENT_NODE) {
+      const next = range.endContainer.childNodes[range.endOffset];
+      if (next && next.nodeType === Node.ELEMENT_NODE) {
+        const buffer = document.createTextNode("\u200B");
+        range.endContainer.insertBefore(buffer, next);
+        range.setEnd(buffer, 0);
+      }
+    }
+  }
+
+  // Rich-text editors (e.g. Slack) can wipe an entire editable region when the
+  // replaced selection included a non-text embed such as an @mention chip —
+  // execCommand("insertText") deletes the whole selection but the host page's
+  // own editor sometimes fails to reconcile that and clears the field. Detect
+  // that and restore the original text so the user's message isn't lost.
+  function insertTextGuarded(el, replacement, original) {
+    const sel = getSelectionFor(el);
+    if (sel.rangeCount > 0) {
+      bufferAwayFromAdjacentElement(sel.getRangeAt(0));
+    }
+    if (!document.execCommand("insertText", false, replacement)) {
+      throw new Error("This editor could not accept the text. Your result is copied; paste it manually.");
+    }
+    if (original.trim() && replacement.trim() && el.innerText.trim() === "") {
+      document.execCommand("insertText", false, original);
+      throw new Error("Couldn't safely replace this text — original text restored. Your result is copied.");
+    }
+  }
+
+  function replaceSelectedText(original, replacement) {
+    // If we have a saved selection from Reply Assist, restore it and use it
+    if (savedSelectionInfo) {
+      const info = savedSelectionInfo;
+
+      if (info.type === "input" && info.element) {
+        const el = info.element;
+        if (!el.isConnected || el.value !== info.value || el.value.substring(info.start, info.end) !== info.text) {
+          throw new Error("The original text changed. Your result is copied; paste it where you need it.");
+        }
+        el.focus();
+        const value = el.value;
+        const setter = Object.getOwnPropertyDescriptor(el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value").set;
+        setter.call(el, value.substring(0, info.start) + replacement + value.substring(info.end));
+        el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.setSelectionRange(info.start, info.start + replacement.length);
+        savedSelectionInfo = null;
+        return;
+      }
+
+      if (info.type === "contenteditable" && info.element && info.range) {
+        const el = info.element;
+        if (!el.isConnected || info.range.toString() !== info.text) {
+          throw new Error("The original text changed. Your result is copied; paste it where you need it.");
+        }
+        el.focus();
+        const sel = getSelectionFor(el);
+        sel.removeAllRanges();
+        sel.addRange(info.range);
+        insertTextGuarded(el, replacement, original);
+        savedSelectionInfo = null;
+        return;
+      }
+
+      if (info.type === "selection" && info.range) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(info.range);
+        info.range.deleteContents();
+        info.range.insertNode(document.createTextNode(replacement));
+        return;
+      }
+    }
+
+    // Fallback: use current focus/selection (for context menu and other shortcuts).
+    // Resolved the same way as in getSelection, so anything auto-select could
+    // reach is also something the replace step can write back into.
+    const activeElement = deepActiveElement();
+
+    if (isTextInput(activeElement)) {
+      const start = activeElement.selectionStart;
+      const end = activeElement.selectionEnd;
+      const value = activeElement.value;
+
+      activeElement.value = value.substring(0, start) + replacement + value.substring(end);
+
+      activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+      activeElement.dispatchEvent(new Event("change", { bubbles: true }));
+
+      activeElement.focus();
+      activeElement.setSelectionRange(start, start + replacement.length);
+      return;
+    }
+
+    if (activeElement && activeElement.isContentEditable) {
+      activeElement.focus();
+      insertTextGuarded(activeElement, replacement, original);
+      return;
+    }
+
+    const selection = getSelectionFor(activeElement);
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(replacement));
+    }
+  }
+
+  function showInlineReviewPanel(request) {
+    const previous = document.getElementById("lbx-inline-review");
+    if (previous?.dataset.reviewId) chrome.runtime.sendMessage({ action: "cancelReview", reviewId: previous.dataset.reviewId });
+    previous?.remove();
+    const host = document.createElement("div");
+    host.id = "lbx-inline-review";
+    host.dataset.reviewId = request.reviewId;
+    host.style.cssText = "all:initial;position:fixed;right:20px;bottom:20px;z-index:2147483647;";
+    const shadow = host.attachShadow({ mode: "open" });
+    const actions = [
+      ["fixGrammar", "Fix spelling & grammar"], ["addPolish", "Add polish"],
+      ["toneFormal", "Make more formal"], ["toneCasual", "Make more casual"],
+      ["toneEmpathetic", "Make more empathetic"], ["toneEmojis", "Add emojis"],
+      ["emailStyle", "Rewrite as an email"], ["makeShorter", "Make shorter"],
+      ["makeLonger", "Make longer"], ["translatePolish", "Translate to Polish"],
+      ["translateUkrainian", "Translate to Ukrainian"], ["translateEnglish", "Translate to English"],
+      ["formatMarkdown", "Format as Markdown"], ["formatSlack", "Format for Slack"],
+      ["translit", "Fix keyboard layout"], ["aiPrompt", "Use as an AI prompt"]
+    ];
+    shadow.innerHTML = `
+      <style>
+        :host{color-scheme:dark}
+        *,*::before,*::after{box-sizing:border-box}
+        .panel{width:min(340px,calc(100vw - 40px));max-height:calc(100vh - 40px);overflow:auto;border:1px solid ${UI.border};border-radius:12px;background:${UI.bg};color:${UI.fg};font:12.5px/1.5 ${UI.font};box-shadow:${UI.shadow}}
+        .top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 11px;border-bottom:1px solid ${UI.border}}
+        .heading{min-width:0;flex:1}.heading strong{display:block;font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:${UI.fg}}
+        .heading p{margin:2px 0 0;font-size:11.5px;line-height:1.5;color:${UI.mutedFg}}
+        button,select,textarea{font:inherit;margin:0}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}
+        svg{display:block;position:static;width:14px;height:14px;flex:0 0 14px}
+        .close{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:${UI.mutedFg}}
+        .close:hover{background:${UI.muted};color:${UI.fg}}
+        .body{padding:12px 14px}
+        .toolbar{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.toolbar label{font-size:11.5px;font-weight:500;color:${UI.fg}}
+        .toolbar select{width:100%;height:32px;border:1px solid ${UI.border};border-radius:6px;background:${UI.bg};color:${UI.fg};padding:0 8px;outline:none}
+        .toolbar select:focus,textarea:focus{border-color:${UI.primary};box-shadow:0 0 0 1px ${UI.primary}}
+        .card{border:1px solid ${UI.border};border-radius:6px;background:${UI.subtle};overflow:hidden;margin-bottom:12px}
+        .card.original{border-left:2px solid ${UI.primary}}
+        .cardhead{padding:8px 10px 0;display:flex;align-items:center;justify-content:space-between;gap:8px}.cardhead b{font-size:11.5px;font-weight:500;color:${UI.fg}}
+        .tag{font-size:9px;color:${UI.mutedFg};font-weight:500;letter-spacing:.02em}
+        .text{display:block;width:100%;min-height:68px;max-height:160px;resize:vertical;border:1px solid transparent;border-radius:5px;background:transparent;color:${UI.fg};padding:8px 10px;font:12.5px/1.5 ${UI.font};outline:none}
+        .text::placeholder{color:${UI.mutedFg}}.result{min-height:86px}
+        .foot{border-top:1px solid ${UI.border};padding:5px 10px;color:${UI.mutedFg};font-size:10px}
+        .status{min-height:18px;color:${UI.mutedFg};font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}.status.error{color:${UI.destructive}}.status.good{color:${UI.success}}
+        .footer{padding:11px 14px 13px;border-top:1px solid ${UI.border}}
+        .actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;border-radius:6px;padding:0 9px;border:1px solid ${UI.border};background:transparent;color:${UI.fg};font-size:11.5px;font-weight:500;line-height:1;white-space:nowrap}
+        .btn:hover:not(:disabled){background:${UI.muted}}.btn.primary{border-color:transparent;background:${UI.primary};color:${UI.primaryFg}}.btn.primary:hover:not(:disabled){background:${UI.primaryHover}}
+        .hint{display:flex;align-items:center;gap:4px;color:${UI.mutedFg};font-size:10px;margin:9px 0 0}
+        .hint kbd{font:10px/1.5 ${UI.mono};border:1px solid ${UI.border};background:${UI.muted};border-radius:4px;padding:1px 5px;color:${UI.mutedFg}}
+        .spin{width:12px;height:12px;flex:0 0 12px;border:2px solid ${UI.mutedFg};border-top-color:${UI.fg};border-radius:50%;display:block;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+      </style>
+      <section class="panel" role="dialog" aria-label="Review text">
+        <header class="top"><div class="heading"><strong>Review text</strong><p>Refine, review, then copy or apply.</p></div><button type="button" class="close" id="close" aria-label="Close">${ICON.x}</button></header>
+        <main class="body">
+          <div class="toolbar"><label for="action">Editing action</label><select id="action" aria-label="Choose an editing action"></select></div>
+          <section class="card original"><div class="cardhead"><b>Your text</b></div><textarea id="source" class="text" aria-label="Your text" placeholder="Type or paste text to refine…"></textarea><div class="foot"><span id="source-count">0 characters</span></div></section>
+          <section class="card"><div class="cardhead"><b>Improved version</b><span class="tag" id="badge">READY TO REVIEW</span></div><textarea id="result" class="text result" aria-label="Improved version" placeholder="Your refined text will appear here…"></textarea><div class="foot"><span id="result-count">0 characters</span></div></section>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
+        </main>
+        <footer class="footer"><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="button" class="btn" id="rewrite">${ICON.rotate}<span>Regenerate</span></button><button type="button" class="btn primary" id="done" disabled>Done &amp; copy</button></div><p class="hint"><kbd>Ctrl + Enter</kbd><kbd>Esc</kbd><span>Apply or close</span></p></footer>
+      </section>`;
+    (document.documentElement || document.body).appendChild(host);
+
+    const $ = (id) => shadow.getElementById(id);
+    const source = $("source"), result = $("result"), actionSelect = $("action");
+    let lastResult = null;
+    let processing = false;
+    for (const [value, label] of actions) {
+      const option = document.createElement("option");
+      option.value = value; option.textContent = label; actionSelect.appendChild(option);
+    }
+    actionSelect.value = request.actionId || "fixGrammar";
+    source.value = request.original || "";
+
+    function counts() {
+      $("source-count").textContent = `${source.value.length.toLocaleString()} characters`;
+      $("result-count").textContent = `${result.value.length.toLocaleString()} characters`;
+      $("done").disabled = processing || !lastResult || !result.value.trim();
+    }
+    function status(message, type = "") {
+      $("status").textContent = message;
+      $("status").className = `status ${type}`;
+    }
+    async function run() {
+      if (!source.value.trim()) { status("Add or paste some text above to begin.", "error"); source.focus(); return; }
+      processing = true; lastResult = null; source.disabled = true;
+      counts();
+      $("rewrite").disabled = true; actionSelect.disabled = true;
+      $("rewrite").innerHTML = '<span class="spin"></span> Working';
+      $("badge").textContent = "PROCESSING";
+      status("Working on your text…");
+      try {
+        const response = await chrome.runtime.sendMessage({
+          action: "processReview", reviewId: request.reviewId,
+          actionId: actionSelect.value, text: source.value
+        });
+        if (!response?.ok) throw new Error(response?.error || "Could not process this text.");
+        result.value = response.text;
+        if (!host.isConnected) return;
+        lastResult = { tokens: response.tokens, responseTimeMs: response.responseTimeMs, action: actionSelect.value, originalText: source.value };
+        $("badge").textContent = "EDITABLE RESULT";
+        status("Ready. Make any final changes, then apply it to the page.", "good");
+        counts(); result.focus();
+      } catch (error) {
+        $("badge").textContent = "TRY AGAIN";
+        status(error.message || "Something went wrong. Please try again.", "error");
+      } finally {
+        processing = false; source.disabled = false;
+        counts();
+        $("rewrite").disabled = false; actionSelect.disabled = false;
+        $("rewrite").innerHTML = ICON.rotate + '<span>Regenerate</span>';
+      }
+    }
+    async function copyResult() {
+      try { await navigator.clipboard.writeText(result.value); return true; }
+      catch {
+        const temp = document.createElement("textarea");
+        temp.value = result.value; temp.style.cssText = "position:fixed;opacity:0;";
+        shadow.appendChild(temp); temp.focus(); temp.select();
+        const copied = document.execCommand("copy"); temp.remove(); return copied;
+      }
+    }
+
+    source.addEventListener("input", counts);
+    result.addEventListener("input", counts);
+    $("rewrite").addEventListener("click", run);
+    actionSelect.addEventListener("change", () => { if (source.value.trim()) run(); });
+    $("cancel").addEventListener("click", () => {
+      chrome.runtime.sendMessage({ action: "cancelReview", reviewId: request.reviewId });
+      host.remove();
+      cancelCurrentReview = null;
+      restoreSavedSelection();
+    });
+    $("close").addEventListener("click", () => $("cancel").click());
+    cancelCurrentReview = () => $("cancel").click();
+    $("done").addEventListener("click", async () => {
+      if (!lastResult || !result.value.trim()) return;
+      $("done").disabled = true; $("done").textContent = "Applying…";
+      const copied = await copyResult();
+      try {
+        if (!copied) throw new Error("Could not copy the result. Select it above and copy it manually.");
+        const response = await chrome.runtime.sendMessage({
+          action: "commitReview", reviewId: request.reviewId, originalText: lastResult.originalText,
+          text: result.value, actionId: lastResult.action,
+          tokens: lastResult.tokens, responseTimeMs: lastResult.responseTimeMs
+        });
+        if (!response?.ok) throw new Error(response?.error || "Could not apply the result.");
+        status(response.replaced ? "Applied to the page and copied to your clipboard." : "Copied to your clipboard. Paste it where you need it.", "good");
+        $("badge").textContent = "APPLIED";
+        cancelCurrentReview = null;
+        setTimeout(() => host.remove(), 600);
+      } catch (error) {
+        status(error.message || "Could not apply the result.", "error");
+        $("done").disabled = false; $("done").textContent = "Done & copy";
+      }
+    });
+    shadow.addEventListener("keydown", event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault(); event.stopPropagation();
+        if (!$("done").disabled) $("done").click();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
+        $("cancel").click();
+      }
+    });
+
+    counts();
+    if (!request.original?.trim()) {
+      status(request.canReplace
+        ? "Nothing selected. Type text above; the result will be inserted at your cursor."
+        : "Nothing selected. Type text above; the result will be copied when you finish.");
+      source.focus();
+    } else {
+      run();
+    }
+  }
+}
