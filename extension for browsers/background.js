@@ -330,6 +330,7 @@ async function commitReview(request) {
     timestamp: new Date().toISOString(),
     original: originalText,
     fixed: request.text,
+    applied: replaced,
     action: request.actionId || review.action,
     tokens: request.tokens || null,
     responseTimeMs: request.responseTimeMs || 0
@@ -421,17 +422,33 @@ async function processTranslit(originalText, tab) {
     return;
   }
 
+  const outcome = await applyGeneratedText(tab.id, originalText, fixedText);
   await addHistoryEntry({
     timestamp: new Date().toISOString(),
     original: originalText,
     fixed: fixedText,
     action: "translit",
+    applied: outcome.replaced,
+    applyError: outcome.error || null,
     tokens: null,
     responseTimeMs: 0
   });
 
-  safeSend({ action: "replaceText", originalText, fixedText });
-  safeSend({ action: "showToast", message: "Layout fixed!", type: "success" });
+  safeSend({
+    action: "showToast",
+    message: outcome.replaced ? "Layout fixed!" : "Text was not applied. Copy the result and paste it into your message.",
+    type: outcome.replaced ? "success" : "error",
+    copyText: outcome.replaced ? undefined : fixedText
+  });
+}
+
+async function applyGeneratedText(tabId, originalText, fixedText) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { action: "replaceText", originalText, fixedText });
+    return response?.replaced ? { replaced: true } : { replaced: false, error: response?.error || "The page did not confirm the replacement." };
+  } catch (error) {
+    return { replaced: false, error: error.message };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -496,17 +513,24 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
       return;
     }
 
+    const outcome = await applyGeneratedText(tab.id, originalText, fixedText);
     await addHistoryEntry({
       timestamp: new Date().toISOString(),
       original: composeWithEdges(originalText, edgeInfo),
       fixed: composeWithEdges(fixedText, edgeInfo),
       action,
+      applied: outcome.replaced,
+      applyError: outcome.error || null,
       tokens,
       responseTimeMs
     });
 
-    safeSendMessage(tab.id, { action: "replaceText", originalText, fixedText });
-    safeSendMessage(tab.id, { action: "showToast", message: "Done!", type: "success" });
+    safeSendMessage(tab.id, {
+      action: "showToast",
+      message: outcome.replaced ? "Done!" : "Text was not applied. Copy the result and paste it into your message.",
+      type: outcome.replaced ? "success" : "error",
+      copyText: outcome.replaced ? undefined : fixedText
+    });
   } catch (error) {
     currentAbortController = null;
     if (isAbortError(error)) {

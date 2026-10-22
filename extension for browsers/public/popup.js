@@ -509,6 +509,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       timestamp.className = "history-meta";
       const actionLabel = ACTION_LABELS[item.action] || "Fix spelling & grammar";
       let meta = new Date(item.timestamp).toLocaleString() + " • " + actionLabel;
+      if (item.applied === true) meta += " • Applied to page";
+      if (item.applied === false) meta += " • Not applied — copy result to paste";
       if (item.responseTimeMs != null) {
         meta += " • " + (item.responseTimeMs / 1000).toFixed(2) + "s";
       }
@@ -519,6 +521,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       }
       timestamp.textContent = meta;
+      if (item.applyError) timestamp.title = item.applyError;
 
       const actions = document.createElement("div");
       actions.className = "history-actions";

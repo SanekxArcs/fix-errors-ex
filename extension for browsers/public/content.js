@@ -13,12 +13,9 @@ if (!window.lbxFixErrorsInjected) {
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "replaceText") {
       const { originalText, fixedText } = request;
-      try {
-        replaceSelectedText(originalText, fixedText);
-        sendResponse({ status: "done", replaced: true });
-      } catch (error) {
-        sendResponse({ replaced: false, error: error.message });
-      }
+      replaceSelectedText(originalText, fixedText)
+        .then(() => sendResponse({ status: "done", replaced: true }))
+        .catch(error => sendResponse({ replaced: false, error: error.message }));
     } else if (request.action === "dismissReview") {
       cancelCurrentReview?.();
       sendResponse({ status: "done" });
@@ -26,7 +23,7 @@ if (!window.lbxFixErrorsInjected) {
       restoreSavedSelection();
       sendResponse({ status: "done" });
     } else if (request.action === "showToast") {
-      showToast(request.message, request.type);
+      showToast(request.message, request.type, { copyText: request.copyText });
       if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "showReplyAssistModal") {
       showReplyAssistPanel(request.selectedText);
@@ -106,7 +103,13 @@ if (!window.lbxFixErrorsInjected) {
     while (el && el.shadowRoot && el.shadowRoot.activeElement) {
       el = el.shadowRoot.activeElement;
     }
-    return el;
+    if (isEditableElement(el)) return el;
+    // Context menus and some editors focus a wrapper/body while keeping a range
+    // inside the actual editable field.
+    const selection = getSelectionFor(el);
+    const node = selection?.rangeCount ? selection.getRangeAt(0).commonAncestorContainer : null;
+    const owner = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    return owner?.closest('[contenteditable]:not([contenteditable="false"])') || el;
   }
 
   function isEditableElement(el) {
@@ -201,6 +204,7 @@ if (!window.lbxFixErrorsInjected) {
       savedSelectionInfo = {
         type: "contenteditable",
         element: activeElement,
+        value: activeElement.textContent,
         range: sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null,
         text: selectedText
       };
@@ -458,6 +462,25 @@ if (!window.lbxFixErrorsInjected) {
       toast.appendChild(cancelBtn);
     }
 
+    if (typeof options.copyText === "string" && options.copyText) {
+      const copyBtn = makeButton("Copy result", { variant: "secondary", size: "sm" });
+      copyBtn.style.flexShrink = "0";
+      copyBtn.onclick = async () => {
+        copyBtn.disabled = true;
+        try {
+          await navigator.clipboard.writeText(options.copyText);
+          // A later request may already have replaced this toast.
+          if (toast.contains(copyBtn)) showToast("Copied! Paste the result into your message.", "success");
+        } catch {
+          if (toast.contains(copyBtn)) {
+            textSpan.innerText = "Could not copy. Try again, or copy the result from extension history.";
+            copyBtn.disabled = false;
+          }
+        }
+      };
+      toast.appendChild(copyBtn);
+    }
+
     if (options.onRetry) {
       const retryBtn = makeButton(options.retryLabel || "Retry", {
         variant: "secondary",
@@ -470,8 +493,10 @@ if (!window.lbxFixErrorsInjected) {
         options.onRetry();
       };
       toast.appendChild(retryBtn);
+    }
 
-      // Retry notices can also be dismissed before their timeout.
+    if (options.onRetry || options.copyText) {
+      // Result warnings remain available until copied or dismissed.
       const closeBtn = makeButton("", {
         variant: "ghost",
         size: "icon",
@@ -484,7 +509,7 @@ if (!window.lbxFixErrorsInjected) {
     }
 
     // Retry notices allow more time, but always expire.
-    if (type !== "working") {
+    if (type !== "working" && !options.copyText) {
       toast._hideTimer = setTimeout(() => hideToast(toast), options.onRetry ? 15000 : 4000);
     } else if (type === "working") {
       // Safety net: if the background worker dies mid-request no final toast
@@ -781,97 +806,115 @@ if (!window.lbxFixErrorsInjected) {
   // execCommand("insertText") deletes the whole selection but the host page's
   // own editor sometimes fails to reconcile that and clears the field. Detect
   // that and restore the original text so the user's message isn't lost.
-  function insertTextGuarded(el, replacement, original) {
+  async function insertTextGuarded(el, replacement, original) {
+    const before = el.innerText;
     const sel = getSelectionFor(el);
     if (sel.rangeCount > 0) {
       bufferAwayFromAdjacentElement(sel.getRangeAt(0));
     }
     if (!document.execCommand("insertText", false, replacement)) {
-      throw new Error("This editor could not accept the text. Your result is copied; paste it manually.");
+      throw new Error("This editor could not accept the text. Copy the result and paste it manually.");
+    }
+    // Let framework editors reconcile the native edit before acknowledging it.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    if (!el.isConnected) {
+      throw new Error("The editor was replaced. Copy the result from extension history and paste it manually.");
     }
     if (original.trim() && replacement.trim() && el.innerText.trim() === "") {
       document.execCommand("insertText", false, original);
-      throw new Error("Couldn't safely replace this text — original text restored. Your result is copied.");
+      throw new Error("Couldn't safely replace this text — original text restored. Copy the result and paste it manually.");
+    }
+    if (original !== replacement && el.innerText === before) {
+      throw new Error("The editor did not keep the replacement. Copy the result from extension history and paste it manually.");
     }
   }
 
-  function replaceSelectedText(original, replacement) {
+  function recoverEditableRange(info) {
+    const el = info.element;
+    if (!el.isConnected || el.textContent !== info.value || !info.text) return null;
+    const start = el.textContent.indexOf(info.text);
+    if (start < 0 || el.textContent.indexOf(info.text, start + 1) >= 0) return null;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let offset = 0, foundStart = false, node;
+    while ((node = walker.nextNode())) {
+      const end = offset + node.length;
+      if (!foundStart && start < end) {
+        range.setStart(node, start - offset);
+        foundStart = true;
+      }
+      if (foundStart && start + info.text.length <= end) {
+        range.setEnd(node, start + info.text.length - offset);
+        return range;
+      }
+      offset = end;
+    }
+    return null;
+  }
+
+  async function replaceSelectedText(original, replacement) {
     // If we have a saved selection from Reply Assist, restore it and use it
     if (savedSelectionInfo) {
       const info = savedSelectionInfo;
+      if (info.text !== original) {
+        throw new Error("Another selection replaced this request. Copy the result from extension history and paste it manually.");
+      }
 
       if (info.type === "input" && info.element) {
         const el = info.element;
         if (!el.isConnected || el.value !== info.value || el.value.substring(info.start, info.end) !== info.text) {
-          throw new Error("The original text changed. Your result is copied; paste it where you need it.");
+          throw new Error("The original text changed. Copy the result and paste it where you need it.");
         }
         el.focus();
         const value = el.value;
         const setter = Object.getOwnPropertyDescriptor(el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value").set;
-        setter.call(el, value.substring(0, info.start) + replacement + value.substring(info.end));
+        const expected = value.substring(0, info.start) + replacement + value.substring(info.end);
+        setter.call(el, expected);
         el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
         el.setSelectionRange(info.start, info.start + replacement.length);
-        savedSelectionInfo = null;
+        await new Promise(resolve => setTimeout(resolve, 50));
+        if (!el.isConnected || el.value !== expected) {
+          throw new Error("The field did not keep the replacement. Copy the result from extension history and paste it manually.");
+        }
+        if (savedSelectionInfo === info) savedSelectionInfo = null;
         return;
       }
 
       if (info.type === "contenteditable" && info.element && info.range) {
         const el = info.element;
-        if (!el.isConnected || info.range.toString() !== info.text) {
-          throw new Error("The original text changed. Your result is copied; paste it where you need it.");
+        if (!el.isConnected) {
+          throw new Error("The original text changed. Copy the result and paste it where you need it.");
         }
+        if (!el.contains(info.range.commonAncestorContainer) || info.range.toString() !== info.text) {
+          info.range = recoverEditableRange(info);
+        }
+        if (!info.range) throw new Error("The original selection changed. Copy the result from extension history and paste it manually.");
         el.focus();
         const sel = getSelectionFor(el);
         sel.removeAllRanges();
         sel.addRange(info.range);
-        insertTextGuarded(el, replacement, original);
-        savedSelectionInfo = null;
+        await insertTextGuarded(el, replacement, original);
+        if (savedSelectionInfo === info) savedSelectionInfo = null;
         return;
       }
 
       if (info.type === "selection" && info.range) {
+        if (!info.range.startContainer.isConnected || !info.range.endContainer.isConnected || info.range.toString() !== original) {
+          throw new Error("The original selection changed. Copy the result from extension history and paste it manually.");
+        }
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(info.range);
         info.range.deleteContents();
         info.range.insertNode(document.createTextNode(replacement));
+        if (savedSelectionInfo === info) savedSelectionInfo = null;
         return;
       }
+      throw new Error("The original field is no longer available. Copy the result from extension history and paste it manually.");
     }
 
-    // Fallback: use current focus/selection (for context menu and other shortcuts).
-    // Resolved the same way as in getSelection, so anything auto-select could
-    // reach is also something the replace step can write back into.
-    const activeElement = deepActiveElement();
-
-    if (isTextInput(activeElement)) {
-      const start = activeElement.selectionStart;
-      const end = activeElement.selectionEnd;
-      const value = activeElement.value;
-
-      activeElement.value = value.substring(0, start) + replacement + value.substring(end);
-
-      activeElement.dispatchEvent(new Event("input", { bubbles: true }));
-      activeElement.dispatchEvent(new Event("change", { bubbles: true }));
-
-      activeElement.focus();
-      activeElement.setSelectionRange(start, start + replacement.length);
-      return;
-    }
-
-    if (activeElement && activeElement.isContentEditable) {
-      activeElement.focus();
-      insertTextGuarded(activeElement, replacement, original);
-      return;
-    }
-
-    const selection = getSelectionFor(activeElement);
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(document.createTextNode(replacement));
-    }
+    throw new Error("The original selection is no longer available. Copy the result from extension history and paste it manually.");
   }
 
   function showInlineReviewPanel(request) {
