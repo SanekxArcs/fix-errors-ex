@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Embedded editor</title></head>
+<body style="margin:6px;font:14px system-ui">
+<textarea id="frame-field" style="width:100%;box-sizing:border-box;min-height:80px;font:inherit">This textarea lives in an iframe and has teh typo.</textarea>
+<script>
+  window.__select = (selector, needle = null) => {
+    const el = document.querySelector(selector);
+    el.focus();
+    const start = needle == null ? 0 : el.value.indexOf(needle);
+    el.setSelectionRange(start, needle == null ? el.value.length : start + needle.length);
+    return el.value.substring(el.selectionStart, el.selectionEnd);
+  };
+  window.__value = selector => document.querySelector(selector).value;
+</script>
+</body>
+</html>

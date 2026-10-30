@@ -17,13 +17,14 @@ if (!window.lbxFixErrorsInjected) {
         .then(() => sendResponse({ status: "done", replaced: true }))
         .catch(error => sendResponse({ replaced: false, error: error.message }));
     } else if (request.action === "dismissReview") {
-      cancelCurrentReview?.();
+      // A new request is starting from the user's current selection; don't restore the old one.
+      cancelCurrentReview?.({ restore: false });
       sendResponse({ status: "done" });
     } else if (request.action === "restoreSelection") {
       restoreSavedSelection();
       sendResponse({ status: "done" });
     } else if (request.action === "showToast") {
-      showToast(request.message, request.type, { copyText: request.copyText });
+      showToast(request.message, request.type, { copyText: request.copyText, timeoutMs: request.timeoutMs });
       if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "showReplyAssistModal") {
       showReplyAssistPanel(request.selectedText);
@@ -201,11 +202,15 @@ if (!window.lbxFixErrorsInjected) {
       };
     } else if (activeElement && activeElement.isContentEditable) {
       const sel = getSelectionFor(activeElement);
+      const range = sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
       savedSelectionInfo = {
         type: "contenteditable",
         element: activeElement,
         value: activeElement.textContent,
-        range: sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null,
+        range,
+        // Selection.toString() puts newlines between paragraphs, Range.toString()
+        // does not; keep the range's own text to verify and recover the range.
+        rangeText: range ? range.toString() : "",
         text: selectedText
       };
     } else {
@@ -397,6 +402,8 @@ if (!window.lbxFixErrorsInjected) {
     // the removal so it doesn't disappear while showing the new message.
     clearTimeout(toast._hideTimer);
     clearTimeout(toast._removeTimer);
+    clearInterval(toast._elapsedTimer);
+    toast.dataset.type = type;
 
     toast.style.cssText = `
       position: fixed;
@@ -446,6 +453,16 @@ if (!window.lbxFixErrorsInjected) {
     toast.appendChild(textSpan);
 
     if (type === "working") {
+      // Elapsed time shows the request is alive. Status updates during one
+      // request (e.g. "Trying fallback") keep counting from the first.
+      if (!toast._workingSince) toast._workingSince = Date.now();
+      const elapsed = document.createElement("span");
+      elapsed.style.cssText = `flex-shrink:0;color:${UI.mutedFg};font-variant-numeric:tabular-nums;font-size:12px;`;
+      const tick = () => { elapsed.textContent = `${Math.floor((Date.now() - toast._workingSince) / 1000)}s`; };
+      tick();
+      toast._elapsedTimer = setInterval(tick, 1000);
+      toast.appendChild(elapsed);
+
       const kbd = makeKbd("Alt+Shift+Esc");
       kbd.style.flexShrink = "0";
       kbd.title = "Cancel without changing your text";
@@ -508,16 +525,17 @@ if (!window.lbxFixErrorsInjected) {
       toast.appendChild(closeBtn);
     }
 
+    if (type !== "working") toast._workingSince = null;
     // Retry notices allow more time, but always expire.
     if (type !== "working" && !options.copyText) {
       toast._hideTimer = setTimeout(() => hideToast(toast), options.onRetry ? 15000 : 4000);
     } else if (type === "working") {
       // Safety net: if the background worker dies mid-request no final toast
-      // ever arrives, and the "working" toast would stay up indefinitely.
+      // ever arrives. Say so instead of spinning forever or vanishing silently.
+      const limit = options.timeoutMs || 90000;
       toast._hideTimer = setTimeout(() => {
-        aiInProgress = false;
-        hideToast(toast);
-      }, 90000);
+        showToast(`No answer after ${Math.round(limit / 1000)} seconds. Your text is unchanged; please try again.`, "error");
+      }, limit);
     }
   }
 
@@ -527,6 +545,7 @@ if (!window.lbxFixErrorsInjected) {
     if (!toast) return;
     clearTimeout(toast._hideTimer);
     clearTimeout(toast._removeTimer);
+    clearInterval(toast._elapsedTimer);
     toast.remove();
   }
 
@@ -615,10 +634,9 @@ if (!window.lbxFixErrorsInjected) {
 
   // Non-blocking bottom-right panel — page stays interactive while open.
   // Selection is saved before rendering so focus change doesn't matter.
+  // The selection was saved by getSelection, possibly in another frame; this
+  // panel only collects context.
   function showReplyAssistPanel(selectedText) {
-    // Capture selection state NOW, before any focus change
-    saveCurrentSelection(selectedText);
-
     const existing = document.getElementById("lbx-reply-assist-panel");
     if (existing) existing.remove();
 
@@ -746,7 +764,6 @@ if (!window.lbxFixErrorsInjected) {
     }
 
     function cancel() {
-      savedSelectionInfo = null;
       panel.remove();
     }
 
@@ -780,12 +797,14 @@ if (!window.lbxFixErrorsInjected) {
   // ops (not Range) so the caret unambiguously lands in plain text first.
   function bufferAwayFromAdjacentElement(range) {
     const wasCollapsed = range.collapsed;
+    const buffers = [];
 
     if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
       const prev = range.startContainer.childNodes[range.startOffset - 1];
       if (prev && prev.nodeType === Node.ELEMENT_NODE) {
         const buffer = document.createTextNode("\u200B");
         range.startContainer.insertBefore(buffer, range.startContainer.childNodes[range.startOffset] || null);
+        buffers.push(buffer);
         range.setStart(buffer, 1);
         if (wasCollapsed) range.setEnd(buffer, 1);
       }
@@ -796,8 +815,19 @@ if (!window.lbxFixErrorsInjected) {
       if (next && next.nodeType === Node.ELEMENT_NODE) {
         const buffer = document.createTextNode("\u200B");
         range.endContainer.insertBefore(buffer, next);
+        buffers.push(buffer);
         range.setEnd(buffer, 0);
       }
+    }
+    return buffers;
+  }
+
+  // The zero-width buffers only steer the caret; never leave them in the message.
+  function removeBuffers(buffers) {
+    for (const buffer of buffers) {
+      if (!buffer.isConnected) continue;
+      if (buffer.data === "\u200B") buffer.remove();
+      else buffer.data = buffer.data.replace(/\u200B/g, "");
     }
   }
 
@@ -809,12 +839,12 @@ if (!window.lbxFixErrorsInjected) {
   async function insertTextGuarded(el, replacement, original) {
     const before = el.innerText;
     const sel = getSelectionFor(el);
-    if (sel.rangeCount > 0) {
-      bufferAwayFromAdjacentElement(sel.getRangeAt(0));
-    }
+    const buffers = sel.rangeCount > 0 ? bufferAwayFromAdjacentElement(sel.getRangeAt(0)) : [];
     if (!document.execCommand("insertText", false, replacement)) {
+      removeBuffers(buffers);
       throw new Error("This editor could not accept the text. Copy the result and paste it manually.");
     }
+    removeBuffers(buffers);
     // Let framework editors reconcile the native edit before acknowledging it.
     await new Promise(resolve => setTimeout(resolve, 50));
     if (!el.isConnected) {
@@ -831,9 +861,10 @@ if (!window.lbxFixErrorsInjected) {
 
   function recoverEditableRange(info) {
     const el = info.element;
-    if (!el.isConnected || el.textContent !== info.value || !info.text) return null;
-    const start = el.textContent.indexOf(info.text);
-    if (start < 0 || el.textContent.indexOf(info.text, start + 1) >= 0) return null;
+    const text = info.rangeText ?? info.text;
+    if (!el.isConnected || el.textContent !== info.value || !text) return null;
+    const start = el.textContent.indexOf(text);
+    if (start < 0 || el.textContent.indexOf(text, start + 1) >= 0) return null;
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const range = document.createRange();
     let offset = 0, foundStart = false, node;
@@ -843,8 +874,8 @@ if (!window.lbxFixErrorsInjected) {
         range.setStart(node, start - offset);
         foundStart = true;
       }
-      if (foundStart && start + info.text.length <= end) {
-        range.setEnd(node, start + info.text.length - offset);
+      if (foundStart && start + text.length <= end) {
+        range.setEnd(node, start + text.length - offset);
         return range;
       }
       offset = end;
@@ -886,7 +917,7 @@ if (!window.lbxFixErrorsInjected) {
         if (!el.isConnected) {
           throw new Error("The original text changed. Copy the result and paste it where you need it.");
         }
-        if (!el.contains(info.range.commonAncestorContainer) || info.range.toString() !== info.text) {
+        if (!el.contains(info.range.commonAncestorContainer) || info.range.toString() !== (info.rangeText ?? info.text)) {
           info.range = recoverEditableRange(info);
         }
         if (!info.range) throw new Error("The original selection changed. Copy the result from extension history and paste it manually.");
@@ -1044,14 +1075,15 @@ if (!window.lbxFixErrorsInjected) {
     result.addEventListener("input", counts);
     $("rewrite").addEventListener("click", run);
     actionSelect.addEventListener("change", () => { if (source.value.trim()) run(); });
-    $("cancel").addEventListener("click", () => {
+    function closeReview({ restore = true } = {}) {
       chrome.runtime.sendMessage({ action: "cancelReview", reviewId: request.reviewId });
       host.remove();
       cancelCurrentReview = null;
-      restoreSavedSelection();
-    });
-    $("close").addEventListener("click", () => $("cancel").click());
-    cancelCurrentReview = () => $("cancel").click();
+      if (restore) restoreSavedSelection();
+    }
+    $("cancel").addEventListener("click", () => closeReview());
+    $("close").addEventListener("click", () => closeReview());
+    cancelCurrentReview = closeReview;
     $("done").addEventListener("click", async () => {
       if (!lastResult || !result.value.trim()) return;
       $("done").disabled = true; $("done").textContent = "Applying…";

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const content = await readFile(new URL('../content.js', import.meta.url), 'utf8');
 const background = await readFile(new URL('../background.js', import.meta.url), 'utf8');
 const context = vm.createContext({ setTimeout, NodeFilter: { SHOW_TEXT: 4 } });
-vm.runInContext(`let savedSelectionInfo = null; ${content.slice(content.indexOf('  async function insertTextGuarded'), content.indexOf('  function showInlineReviewPanel'))}`, context);
+vm.runInContext(`let savedSelectionInfo = null; ${content.slice(content.indexOf('  function removeBuffers'), content.indexOf('  function showInlineReviewPanel'))}`, context);
 context.getSelectionFor = () => ({ rangeCount: 0 });
 context.document = { execCommand: () => true };
 context.el = { isConnected: true, innerText: 'typo' };

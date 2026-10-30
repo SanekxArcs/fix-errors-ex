@@ -151,3 +151,47 @@ The existing workflow, quota, fallback, and popup checks passed with updated
 expectations for optional setup. The WXT Chrome package builds; live browser
 behavior remains unverified.
 
+
+## 2.0.13: live-browser test environment; stuck requests and missed pastes
+
+`test/` now holds a real-browser test environment. `npm run test:e2e` builds
+the extension, loads it into Chromium with Playwright, and serves a mock AI
+(LM Studio and Gemini compatible) with failure modes: slow, hang, 500,
+overloaded, 429, empty, `<think>`, MAX_TOKENS, dropped connection.
+`test/test-page.html` covers inputs, textareas, React-style inputs,
+single/multi-paragraph contenteditable, Slack-style mentions, re-rendering and
+reverting editors, shadow DOM, iframes (normal and srcdoc), read-only text, and
+fields edited while waiting. A log records every toast with its timing.
+`npm run test:env` serves the same page and mock AI for manual testing
+(LM Studio provider, URL http://localhost:1235).
+
+Against 2.0.12, 15 scenarios showed real failures in the browser (two more
+failures came from harness bugs, since fixed). A later scenario found the
+double-click whitespace bug. Fixes:
+
+- Requests could hang forever: passing an abort signal replaced the 30-second
+  fetch timeout. Each provider attempt now has a deadline (30s default,
+  `requestTimeoutSeconds` setting). A timeout falls through to the fallback, then
+  shows a retryable error. The review panel uses the same deadline.
+- The working toast shows elapsed seconds. If the worker dies, the safety net
+  shows an error; it no longer disappears silently after 90s.
+- Reply Assist and "Retry with model" lost their target when Chrome stopped the
+  idle worker: submit/retry did nothing. Targets live in session storage;
+  expired retries say so.
+- Multi-paragraph contenteditable selections (Gmail/Outlook style) never
+  applied: Selection.toString() and Range.toString() differ in newlines.
+- Iframe editors (embedded textareas, TinyMCE/CKEditor style) were never read.
+  Content scripts load in all frames; shortcuts find the focused frame, menu
+  clicks use their frame, and toasts stay in the top frame.
+- Selection edge whitespace is preserved (double-clicked "word " no longer
+  glues words). Zero-width caret buffers are removed after Slack-style inserts.
+- `<think>` blocks are stripped; empty Gemini answers explain finishReason or
+  blockReason. Gemini model caps are cached in session storage across worker
+  restarts.
+- Cancel is per tab; a new request in a tab quietly replaces the old one.
+  Not-applied toasts state the reason and keep the Copy button.
+
+37/37 browser scenarios pass, including real worker shutdowns through
+DevTools; replacement regression checks pass. Provider responses are mocked;
+production Gemini and third-party sites such as Slack, Gmail, and Google Docs
+(canvas) were not tested live.

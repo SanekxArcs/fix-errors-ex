@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fix Errors AI — test environment</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #111827; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 24px 320px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lead { color: #4b5563; margin: 0 0 16px; }
+  .case { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; }
+  .case h2 { font-size: 13px; margin: 0 0 2px; }
+  .case p { margin: 0 0 8px; color: #6b7280; font-size: 12px; }
+  input[type=text], textarea, .editor, iframe { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; font: inherit; background: #fff; }
+  textarea { min-height: 80px; }
+  .editor { min-height: 40px; }
+  .editor p, .editor div { margin: 0; }
+  .mention { background: #e0e7ff; color: #3730a3; border-radius: 4px; padding: 0 3px; }
+  iframe { height: 110px; padding: 0; }
+  #controls { position: sticky; top: 0; z-index: 10; background: #111827; color: #f9fafb; padding: 10px 24px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+  #controls select, #controls input, #controls button { font: inherit; border-radius: 6px; border: 1px solid #374151; background: #1f2937; color: #f9fafb; padding: 3px 8px; }
+  #controls code { background: #1f2937; padding: 1px 6px; border-radius: 4px; }
+  #log { position: fixed; left: 16px; bottom: 16px; width: min(520px, calc(100vw - 420px)); max-height: 260px; overflow: auto; background: #111827; color: #e5e7eb; font: 12px/1.45 ui-monospace, Consolas, monospace; border-radius: 8px; padding: 8px 10px; z-index: 5; }
+  #log .working { color: #93c5fd; } #log .success { color: #86efac; } #log .error { color: #fca5a5; } #log .info { color: #d1d5db; }
+</style>
+</head>
+<body>
+<div id="controls">
+  <strong>Mock AI</strong>
+  <label>mode <select id="mock-mode"></select></label>
+  <label>delay ms <input id="mock-delay" type="number" min="0" step="500" style="width:80px"></label>
+  <button id="mock-apply" type="button">Apply</button>
+  <span id="mock-status"></span>
+  <span>Set the extension to LM Studio, Server URL <code id="mock-url"></code></span>
+</div>
+<main>
+  <h1>Fix Errors AI — test environment</h1>
+  <p class="lead">Select text in any field below and use Alt+Shift+G (fix selected), Alt+Shift+F, Alt+Shift+A (Reply Assist), Alt+Shift+R (review), or the right-click menu. Typos like “teh”, “recieve”, “wierd”, “adress” are fixed by the mock AI. Every toast the extension shows is logged at the bottom left with its time since the request started.</p>
+
+  <section class="case"><h2>1. Plain input</h2><p>Simple &lt;input&gt;.</p>
+    <input type="text" id="plain-input" value="I will recieve teh package tomorrow"></section>
+
+  <section class="case"><h2>2. Textarea, multi-line</h2><p>Select a line or everything.</p>
+    <textarea id="textarea">Line one has teh typo.
+Line two is fine.
+Line three is wierd.</textarea></section>
+
+  <section class="case"><h2>3. React-style controlled input</h2><p>Re-renders its value from state every 100 ms, like React. A replacement that skips the input event gets reverted.</p>
+    <input type="text" id="react-input" value="Send it to teh new adress"></section>
+
+  <section class="case"><h2>4. Contenteditable, single line</h2>
+    <div class="editor" id="ce-single" contenteditable="true">Please check teh adress before sending.</div></section>
+
+  <section class="case"><h2>5. Contenteditable, multiple paragraphs (Gmail / Outlook style)</h2>
+    <div class="editor" id="ce-multi" contenteditable="true"><div>Hi team,</div><div>I did not recieve teh files yet.</div><div>Thanks</div></div></section>
+
+  <section class="case"><h2>6. Slack-style editor with a mention chip</h2>
+    <div class="editor" id="ce-mention" contenteditable="true"><p><span class="mention" contenteditable="false">@Anna</span> can you recieve teh files today?</p></div></section>
+
+  <section class="case"><h2>7. Editor that rebuilds its text nodes</h2><p>Re-creates its DOM every 300 ms while the AI works, with the same text (like Slack/Lexical reconciling), so the saved range goes stale.</p>
+    <div class="editor" id="ce-rerender" contenteditable="true">This message is definately wierd.</div></section>
+
+  <section class="case"><h2>8. Editor that reverts programmatic edits</h2><p>Restores its own model right after every edit, like a framework editor that ignores outside changes. Expect a clear “not applied” message with a Copy button.</p>
+    <div class="editor" id="ce-reject" contenteditable="true">Teh editor will reject this.</div></section>
+
+  <section class="case"><h2>9. Input inside a shadow root (web component)</h2>
+    <div id="shadow-host"></div></section>
+
+  <section class="case"><h2>10. Textarea inside an iframe</h2>
+    <iframe id="frame-textarea" src="/frame.html"></iframe></section>
+
+  <section class="case"><h2>11. Rich editor iframe (TinyMCE / CKEditor style, srcdoc)</h2>
+    <iframe id="frame-rich" srcdoc="<body contenteditable='true' style='font:14px system-ui;margin:8px'>The body of this editor has teh typo.</body>"></iframe></section>
+
+  <section class="case"><h2>12. Read-only page text</h2>
+    <p id="readonly" style="color:#111827;font-size:14px">This paragraph is not editable and has teh typo.</p></section>
+
+  <section class="case"><h2>13. Field that the user keeps editing</h2><p>Type here while the AI is working: the result must not overwrite your new text.</p>
+    <input type="text" id="edited-input" value="Edit me while teh AI works"></section>
+</main>
+<div id="log" aria-live="polite"><div>Extension feedback log</div></div>
+<script>
+(() => {
+  // React-style controlled input: state only changes through input events.
+  const react = document.getElementById('react-input');
+  let reactState = react.value;
+  react.addEventListener('input', () => { reactState = react.value; });
+  setInterval(() => { if (react.value !== reactState) react.value = reactState; }, 100);
+
+  // Rebuilds its text nodes with identical text.
+  const rerender = document.getElementById('ce-rerender');
+  setInterval(() => {
+    if (document.getElementById('lbx-ai-toast')?.dataset.type !== 'working') return;
+    rerender.replaceChildren(document.createTextNode(rerender.textContent));
+  }, 300);
+
+  const reject = document.getElementById('ce-reject');
+  const model = reject.innerHTML;
+  reject.addEventListener('input', () => setTimeout(() => { reject.innerHTML = model; }, 0));
+
+  const host = document.getElementById('shadow-host');
+  host.attachShadow({ mode: 'open' }).innerHTML = '<textarea id="shadow-textarea" style="width:100%;box-sizing:border-box;min-height:60px;font:inherit">Shadow DOM text has teh typo.</textarea>';
+
+  // Test helpers (also handy from DevTools): select text in a field.
+  window.__select = (selector, needle = null, root = document) => {
+    const el = root.querySelector(selector);
+    el.focus();
+    if (typeof el.selectionStart === 'number' && 'value' in el) {
+      const start = needle == null ? 0 : el.value.indexOf(needle);
+      el.setSelectionRange(start, needle == null ? el.value.length : start + needle.length);
+      return el.value.substring(el.selectionStart, el.selectionEnd);
+    }
+    const doc = el.ownerDocument;
+    const range = doc.createRange();
+    if (needle == null) range.selectNodeContents(el);
+    else {
+      const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node, offset = 0, start = null;
+      const full = el.textContent, index = full.indexOf(needle);
+      while ((node = walker.nextNode())) {
+        const end = offset + node.length;
+        if (start == null && index < end) { range.setStart(node, index - offset); start = index; }
+        if (start != null && index + needle.length <= end) { range.setEnd(node, index + needle.length - offset); break; }
+        offset = end;
+      }
+    }
+    const selection = (el.getRootNode().getSelection?.()) || doc.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection.toString();
+  };
+  window.__value = (selector, root = document) => {
+    const el = root.querySelector(selector);
+    return 'value' in el && typeof el.value === 'string' && el.tagName !== 'DIV' ? el.value : el.innerText;
+  };
+
+  // Feedback log: records every toast the extension shows.
+  const log = document.getElementById('log');
+  window.__toasts = [];
+  let startedAt = null;
+  let lastText = '';
+  const record = () => {
+    const toast = document.getElementById('lbx-ai-toast');
+    // Ignore the toast's ticking seconds counter; log only real status changes.
+    const text = toast ? toast.innerText.replace(/\b\d+s\b/g, '').replace(/\s+/g, ' ').trim() : '';
+    if (text === lastText) return;
+    lastText = text;
+    if (!text) return;
+    const type = toast.dataset.type || (/working|Waiting|Trying|Applying/i.test(text) ? 'working' : /Done|fixed|Copied/i.test(text) ? 'success' : /Error|fail|not applied|could not|expired|No answer|did not/i.test(text) ? 'error' : 'info');
+    if (type === 'working' && !startedAt) startedAt = Date.now();
+    const elapsed = startedAt ? ((Date.now() - startedAt) / 1000).toFixed(1) + 's' : '';
+    window.__toasts.push({ at: Date.now(), type, text });
+    const line = document.createElement('div');
+    line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()} +${elapsed}] ${type.toUpperCase()}: ${text}`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+    if (type !== 'working') startedAt = null;
+  };
+  new MutationObserver(record).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+  // Mock server controls.
+  const modeSelect = document.getElementById('mock-mode');
+  const delay = document.getElementById('mock-delay');
+  const status = document.getElementById('mock-status');
+  document.getElementById('mock-url').textContent = location.origin;
+  const sync = body => fetch('/__mock', body ? { method: 'POST', body: JSON.stringify(body) } : undefined)
+    .then(r => r.json()).then(s => {
+      if (!modeSelect.options.length) s.modes.forEach(m => modeSelect.add(new Option(m, m)));
+      modeSelect.value = s.mode; delay.value = s.delayMs;
+      status.textContent = `${s.requests} AI requests so far`;
+    }).catch(() => { status.textContent = 'mock server offline'; });
+  document.getElementById('mock-apply').onclick = () => sync({ mode: modeSelect.value, delayMs: Number(delay.value) });
+  sync();
+})();
+</script>
+</body>
+</html>

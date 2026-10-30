@@ -54,6 +54,10 @@ const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 const DEFAULT_LM_STUDIO_URL = "http://localhost:1234";
 
+// How long one provider attempt may take before the request fails with a
+// retryable error. Overridable with the requestTimeoutSeconds setting.
+const DEFAULT_REQUEST_TIMEOUT_SECONDS = 30;
+
 // Mirrors ai.google.dev/gemini-api/docs/models (checked 2026-09-13), ordered
 // with the recommended default first, then newest to oldest.
 const GEMINI_MODELS = [
