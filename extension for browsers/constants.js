@@ -52,6 +52,10 @@ const ACTION_LABELS = {
 // capable enough for grammar and tone work.
 const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
+// How many edits the History tab keeps in full. Older ones are folded into the
+// all-time totals; the mistakes dictionary keeps what it learned from them.
+const HISTORY_LIMIT = 500;
+
 const DEFAULT_LM_STUDIO_URL = "http://localhost:1234";
 
 // How long one provider attempt may take before the request fails with a

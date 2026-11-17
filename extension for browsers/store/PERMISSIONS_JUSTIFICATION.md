@@ -39,7 +39,8 @@ Used with chrome.storage.local to save the following on the user's own device on
 1. The AI provider settings the user enters: their Google Gemini API key, chosen model and fallback model, and their LM Studio server address and model name.
 2. The user's preferences: auto-select-all and include-context toggles.
 3. The user's custom prompt templates. Every action's system prompt is editable in the popup's Prompts tab, and the edited version is stored here.
-4. A local record of the user's last 50 text edits, plus all-time usage totals, shown in the popup's History tab so the user can review what they changed and see their usage. The user can clear this at any time with the "Clear History" button.
+4. A local record of the user's last 500 text edits, plus all-time usage totals, shown in the popup's History tab so the user can review what they changed and see their usage. The user can clear this at any time with the "Clear History" button.
+5. A list of the corrections made most often to the user's writing (for example "teh → the", with a count and a short example), worked out on the device by comparing each original text with its fixed version. It is shown in the popup's Mistakes tab and can be cleared with the "Reset mistakes" button.
 
 None of this is transmitted to the developer; the project has no backend server. The API key is sent only to Google's Gemini API, to authenticate the user's own request.
 ```
@@ -107,7 +108,7 @@ Chrome treats data as *collected* when it leaves the user's device. Tick these t
 | **Контент веб-сайту** | **Yes** | The text the user explicitly selects and asks the extension to process. |
 
 **"Дії користувача" (user activity).** The extension keeps a local history of the last
-50 edits and running usage totals. This never leaves `chrome.storage.local` on the
+500 edits, a list of the user's most frequent corrections and running usage totals. This never leaves `chrome.storage.local` on the
 user's device, so under Google's "collected = transmitted off the device" reading it is
 not collected, and the case for leaving it unticked is sound. But it is the one box on
 this form that is genuinely arguable, and over-disclosing has never got an extension

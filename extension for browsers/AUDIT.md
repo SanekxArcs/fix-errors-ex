@@ -152,6 +152,14 @@ expectations for optional setup. The WXT Chrome package builds; live browser
 behavior remains unverified.
 
 
+## 2.0.14: About section in the popup
+
+The Settings tab ends with an About card: a short description, a "Star on
+GitHub" button, a "Buy me a coffee" link (buymeacoffee.com/sanekxarcs) and a
+link to open an issue. The README gains a matching "Support the project"
+section.
+
+
 ## 2.0.13: live-browser test environment; stuck requests and missed pastes
 
 `test/` now holds a real-browser test environment. `npm run test:e2e` builds
@@ -195,3 +203,40 @@ double-click whitespace bug. Fixes:
 DevTools; replacement regression checks pass. Provider responses are mocked;
 production Gemini and third-party sites such as Slack, Gmail, and Google Docs
 (canvas) were not tested live.
+
+## 2.1.0: learn from your corrections; history export; shortcuts in Settings
+
+The extension now shows what a fix changed and keeps track of the mistakes it
+corrects most often. The comparison is a word-level diff computed on the
+device (`learning.js`), so it costs no extra request or tokens.
+
+- After "Fix spelling & grammar" the toast names the corrections, for example
+  `Done! 4 fixes: i → I, dont → don't, +2 more`, and stays up for 7 seconds.
+- History highlights the removed words in the original and the added words in
+  the result. Rewrites (tone, translation) have too little in common and stay
+  plain.
+- New Mistakes tab: the most frequent corrections with a count, a type
+  (spelling, punctuation, capitalization, missing word, extra word, grammar &
+  wording) and a short example, with a filter by type. Only "Fix spelling &
+  grammar" edits feed it; on first use it is built from the existing history.
+  "Reset mistakes" clears it and keeps the history.
+- "Explain my mistakes" sends the top 40 corrections with their counts (not
+  the messages and not the examples) to the configured provider and shows a
+  short summary of the patterns.
+- "Export" in History and Mistakes saves one JSON file with the edit history,
+  the all-time totals and the mistakes list. The API key and settings are not
+  included.
+- History keeps the last 500 edits instead of 50 and is rendered 30 cards at
+  a time. Older edits still fold into the all-time totals.
+- The Shortcuts tab is gone; the shortcut list is now a section at the bottom
+  of Settings, above About.
+
+The store drafts in `store/` and the README describe the new storage. The
+dashboard copy in `docs/chrome-web-store/` was written for 2.0.13 and still
+says 50 history entries; it needs updating before the next submission.
+
+37/37 browser scenarios and the replacement regression checks pass. In the
+built extension the new tabs, the filter, export and reset were exercised in
+Chromium. The AI summary was only checked for its error path (unreachable
+server), not against a real provider. Learning corrections without calling
+the AI at all is not implemented; the mistakes list is the data for it.

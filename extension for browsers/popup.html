@@ -7,240 +7,353 @@
   </head>
   <body>
     <header class="app-header">
-      <span class="brand-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#152445" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 15l2 2 5-5"/></svg></span>
+      <img class="brand-mark" src="icons/icon48.png" width="28" height="28" alt="">
       <div class="brand-copy"><h1>Fix Errors AI</h1><span>AI writing workspace</span></div>
       <div class="header-actions">
         <span id="save-indicator" class="save-indicator" role="status" aria-live="polite" hidden></span>
-        <span id="app-version" class="badge badge-outline">v1.7.0</span>
+        <span id="app-version" class="badge badge-outline"></span>
       </div>
     </header>
 
-    <div class="tabs-list" role="tablist">
-      <button type="button" id="view-settings-btn" class="tabs-trigger" role="tab" aria-selected="true" data-state="active">Settings</button>
-      <button type="button" id="view-history-btn" class="tabs-trigger" role="tab">History</button>
-      <button type="button" id="view-prompts-btn" class="tabs-trigger" role="tab">Prompts</button>
-      <button type="button" id="view-shortcuts-btn" class="tabs-trigger" role="tab">Shortcuts</button>
+    <div class="tabs-list" role="tablist" aria-label="Sections">
+      <button type="button" id="view-settings-btn" class="tabs-trigger" role="tab" aria-controls="settings-view" aria-selected="true" tabindex="0" data-state="active">Settings</button>
+      <button type="button" id="view-history-btn" class="tabs-trigger" role="tab" aria-controls="history-view" aria-selected="false" tabindex="-1">History</button>
+      <button type="button" id="view-mistakes-btn" class="tabs-trigger" role="tab" aria-controls="mistakes-view" aria-selected="false" tabindex="-1">Mistakes</button>
+      <button type="button" id="view-prompts-btn" class="tabs-trigger" role="tab" aria-controls="prompts-view" aria-selected="false" tabindex="-1">Prompts</button>
     </div>
 
     <!-- Settings View -->
-    <div id="settings-view" class="tabs-content" role="tabpanel" data-state="active">
-      <div class="section-heading">
-        <span class="section-title">AI Provider</span>
-        <span class="text-muted">Choose where text is processed.</span>
-      </div>
+    <div id="settings-view" class="tabs-content" role="tabpanel" aria-labelledby="view-settings-btn" tabindex="0" data-state="active">
+      <section class="settings-group" aria-labelledby="settings-provider-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="settings-provider-title">AI provider</h2>
+          <span class="text-muted">Choose where your text is processed.</span>
+        </div>
 
-      <div class="field">
-        <label class="label" for="providerSelect">Provider</label>
-        <select id="providerSelect" class="select">
-          <option value="gemini">Google Gemini</option>
-          <option value="lmstudio">LM Studio (Local)</option>
-        </select>
-      </div>
-
-      <div id="gemini-section" class="card">
-        <div class="card-content">
-          <div class="field">
-            <label class="label" for="apiKey">Gemini API Key</label>
-            <div class="input-group">
-              <input type="password" id="apiKey" class="input" placeholder="Paste your API key here" />
-              <button type="button" id="toggle-api-key-btn" class="btn btn-outline btn-icon" title="Show API key" aria-label="Show API key">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </button>
-              <button type="button" id="copy-api-key-btn" class="btn btn-outline btn-icon" title="Copy API key" aria-label="Copy API key">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                </svg>
-              </button>
+        <div class="card" id="provider-card">
+          <div class="card-content">
+            <div class="field">
+              <label class="label" for="providerSelect">Provider</label>
+              <select id="providerSelect" class="select">
+                <option value="gemini">Google Gemini</option>
+                <option value="lmstudio">LM Studio (Local)</option>
+              </select>
             </div>
-            <p id="api-key-warning" class="field-error" hidden>
-              A Gemini API key is required before text can be processed.
-            </p>
-          </div>
-          <div class="field" id="gemini-model-field">
-            <label class="label" for="modelSelect">Primary Model</label>
-            <select id="modelSelect" class="select"></select>
+
+            <div id="gemini-section" class="provider-fields">
+              <div id="api-key-setup" class="alert alert-primary" hidden>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" />
+                  <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
+                </svg>
+                <div class="alert-main">
+                  <p class="alert-title" id="api-key-setup-title">Add your Gemini API key to get started</p>
+                  <div class="alert-row">
+                    <a id="get-api-key-btn" class="btn btn-primary btn-sm alert-action" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" title="Free from Google AI Studio, takes about a minute">
+                      Get a free key
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M15 3h6v6" />
+                        <path d="M10 14 21 3" />
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      </svg>
+                      <span class="sr-only">from Google AI Studio (opens in a new tab)</span>
+                    </a>
+                    <p class="alert-body">Your key stays in this browser.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <div class="label-row">
+                  <label class="label" for="apiKey">Gemini API key</label>
+                  <a id="api-key-link" class="label-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Get a key<span class="sr-only"> (opens in a new tab)</span></a>
+                </div>
+                <div class="input-group">
+                  <input type="password" id="apiKey" class="input" placeholder="Paste your API key here" />
+                  <button type="button" id="toggle-api-key-btn" class="btn btn-outline btn-icon" title="Show API key" aria-label="Show API key">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                  <button type="button" id="copy-api-key-btn" class="btn btn-outline btn-icon" title="Copy API key" aria-label="Copy API key">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                  </button>
+                </div>
+                <p id="api-key-warning" class="field-error" hidden>Enter an API key. Fix Errors AI can't process text without one.</p>
+              </div>
+              <div class="field" id="gemini-model-field">
+                <label class="label" for="modelSelect">Primary model</label>
+                <select id="modelSelect" class="select"></select>
+              </div>
+            </div>
+
+            <div id="lmstudio-section" class="provider-fields" hidden>
+              <div class="field">
+                <label class="label" for="lmStudioUrl">Server URL</label>
+                <input type="text" id="lmStudioUrl" class="input" placeholder="http://localhost:1234" />
+              </div>
+              <div class="field">
+                <label class="label" for="lmStudioModel">Model identifier</label>
+                <input type="text" id="lmStudioModel" class="input" placeholder="e.g. qwen2.5-7b-instruct" />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div id="lmstudio-section" class="card" hidden>
-        <div class="card-content">
-          <div class="field">
-            <label class="label" for="lmStudioUrl">Server URL</label>
-            <input type="text" id="lmStudioUrl" class="input" placeholder="http://localhost:1234" />
-          </div>
-          <div class="field">
-            <label class="label" for="lmStudioModel">Model Identifier</label>
-            <input type="text" id="lmStudioModel" class="input" placeholder="e.g. qwen2.5-7b-instruct" />
+      <section class="settings-group" aria-labelledby="settings-general-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="settings-general-title">General</h2>
+          <span class="text-muted">Behaviour when you trigger an action.</span>
+        </div>
+        <div class="card">
+          <div class="card-content">
+            <div class="switch-row">
+              <label class="label" for="autoSelectAll">Auto-select the whole field (<span id="shortcut-autoselect-label">Alt+Shift+F</span>)</label>
+              <input type="checkbox" id="autoSelectAll" class="switch" />
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <div class="card-content">
-          <div class="field">
-            <label class="label" for="fallbackProviderSelect">Fallback provider</label>
-            <select id="fallbackProviderSelect" class="select">
-              <option value="none">None</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="lmstudio">LM Studio (Local)</option>
-            </select>
-          </div>
-          <div class="field" id="fallback-gemini-section" hidden>
-            <label class="label" for="fallbackModelSelect">Fallback model</label>
-            <select id="fallbackModelSelect" class="select"></select>
-          </div>
-          <div id="fallback-lmstudio-section" hidden>
-            <div class="field"><label class="label" for="fallbackLmStudioUrl">Fallback server URL</label><input id="fallbackLmStudioUrl" class="input" type="text" placeholder="http://localhost:1234" /></div>
-            <div class="field"><label class="label" for="fallbackLmStudioModel">Fallback model identifier</label><input id="fallbackLmStudioModel" class="input" type="text" placeholder="Use the model loaded on the server" /></div>
-          </div>
-          <p class="text-muted">Used when the primary model fails or reaches its budget. If custom budgets are enabled, configure the fallback budget too.</p>
+      <section class="settings-group" aria-labelledby="settings-advanced-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="settings-advanced-title">Advanced</h2>
+          <span class="text-muted">Optional. The defaults work for most people.</span>
         </div>
-      </div>
-      <hr class="separator" />
-
-      <div class="section-heading">
-        <span class="section-title">Model limits</span>
-        <span class="text-muted">Automatic model checks, optional personal budgets.</span>
-      </div>
-      <div class="card">
-        <form id="model-limits-form" class="card-content">
-          <div class="switch-row">
-            <label class="label" for="model-limits-enabled">Enable custom budget limits</label>
-            <input id="model-limits-enabled" type="checkbox" class="switch" />
+        <details class="card disclosure" id="fallback-disclosure">
+          <summary class="disclosure-summary">
+            <span class="disclosure-title">Fallback provider</span>
+            <span class="disclosure-value" id="fallback-summary-value">None</span>
+            <svg class="disclosure-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="card-content">
+            <div class="field">
+              <!-- The summary above already shows this title; keep it for screen readers only. -->
+              <label class="sr-only" for="fallbackProviderSelect">Fallback provider</label>
+              <select id="fallbackProviderSelect" class="select">
+                <option value="none">None</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="lmstudio">LM Studio (Local)</option>
+              </select>
+            </div>
+            <div class="field" id="fallback-gemini-section" hidden>
+              <label class="label" for="fallbackModelSelect">Fallback model</label>
+              <select id="fallbackModelSelect" class="select"></select>
+            </div>
+            <div id="fallback-lmstudio-section" class="provider-fields" hidden>
+              <div class="field"><label class="label" for="fallbackLmStudioUrl">Fallback server URL</label><input id="fallbackLmStudioUrl" class="input" type="text" placeholder="http://localhost:1234" /></div>
+              <div class="field"><label class="label" for="fallbackLmStudioModel">Fallback model identifier</label><input id="fallbackLmStudioModel" class="input" type="text" placeholder="Use the model loaded on the server" /></div>
+            </div>
+            <p class="text-muted">Used when the primary model fails or reaches its budget. If custom budgets are enabled, configure the fallback budget too.</p>
           </div>
-          <p class="text-muted">Turn off to use models without setting personal budgets. Provider limits and rate-limit cooldowns still apply.</p>
-          <div class="field">
-            <label class="label" for="limits-model">Model to configure</label>
-            <select id="limits-model" class="select"></select>
-          </div>
-          <p id="limits-automatic" class="text-muted" role="status" aria-live="polite"></p>
-          <p class="text-muted" id="limits-help">Gemini's model input/output limits load automatically with your API key. Google does not publish one universal free-tier rate table: copy your project's active rates from <a href="https://aistudio.google.com/rate-limit?timeRange=last-28-days" target="_blank" rel="noopener noreferrer">Google AI Studio</a> if you enable custom budgets.</p>
-          <p class="text-muted" id="limits-local-help" hidden>Use personal budgets for your local server. Token usage is estimated conservatively from text size. Set max input below the loaded context window, leaving room for the output cap. A different server-default model needs its limits updated here.</p>
-          <div class="limits-grid" id="limits-custom-fields">
-            <div class="field"><label class="label" for="limit-rpm">Requests / minute</label><input id="limit-rpm" class="input" type="number" min="1" step="1" required /></div>
-            <div class="field"><label class="label" for="limit-rpd">Requests / day</label><input id="limit-rpd" class="input" type="number" min="1" step="1" required /></div>
-            <div class="field"><label class="label" for="limit-tpm">Input tokens / minute</label><input id="limit-tpm" class="input" type="number" min="1" step="1" required /></div>
-            <div class="field"><label class="label" for="limit-tpd">Input tokens / day</label><input id="limit-tpd" class="input" type="number" min="0" step="1" placeholder="Optional" /></div>
-            <div class="field"><label class="label" for="limit-maxInputTokens">Max input / request</label><input id="limit-maxInputTokens" class="input" type="number" min="1" step="1" required /></div>
-            <div class="field"><label class="label" for="limit-maxOutputTokens">Max output / reply</label><input id="limit-maxOutputTokens" class="input" type="number" min="1" step="1" required /></div>
-          </div>
-          <p id="limits-usage" class="text-muted" role="status" aria-live="polite"></p>
-          <p class="text-muted">Counts cover this extension on this browser only, including prompts and context. Other apps may share your project quota. Daily budgets reset at midnight Pacific time. Failed attempts count too. For unlimited provider quotas, choose a personal cap; leave daily tokens blank to disable that cap.</p>
-          <p id="limits-error" class="field-error" role="alert" hidden></p>
-          <button id="save-model-limits" class="btn btn-primary" type="submit">Save custom budget</button>
-        </form>
-      </div>
+        </details>
+        <details class="card disclosure" id="limits-disclosure">
+          <summary class="disclosure-summary">
+            <span class="disclosure-title">Model limits &amp; budgets</span>
+            <span class="disclosure-value" id="limits-summary-value">Off</span>
+            <svg class="disclosure-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <form id="model-limits-form" class="card-content">
+            <div class="switch-row">
+              <label class="label" for="model-limits-enabled">Enable custom budget limits</label>
+              <input id="model-limits-enabled" type="checkbox" class="switch" />
+            </div>
+            <p class="text-muted">Turn off to use models without setting personal budgets. Provider limits and rate-limit cooldowns still apply.</p>
+            <div class="field">
+              <label class="label" for="limits-model">Model to configure</label>
+              <select id="limits-model" class="select"></select>
+            </div>
+            <p id="limits-automatic" class="text-muted" role="status" aria-live="polite"></p>
+            <p class="text-muted" id="limits-help">Input/output limits load automatically with your API key. For custom budgets, copy your project's rates from <a href="https://aistudio.google.com/rate-limit?timeRange=last-28-days" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</p>
+            <p class="text-muted" id="limits-local-help" hidden>Use personal budgets for your local server. Token usage is estimated conservatively from text size. Set max input below the loaded context window, leaving room for the output cap. A different server-default model needs its limits updated here.</p>
+            <div class="limits-grid" id="limits-custom-fields">
+              <div class="field"><label class="label" for="limit-rpm">Requests / minute</label><input id="limit-rpm" class="input" type="number" min="1" step="1" required /></div>
+              <div class="field"><label class="label" for="limit-rpd">Requests / day</label><input id="limit-rpd" class="input" type="number" min="1" step="1" required /></div>
+              <div class="field"><label class="label" for="limit-tpm">Input tokens / minute</label><input id="limit-tpm" class="input" type="number" min="1" step="1" required /></div>
+              <div class="field"><label class="label" for="limit-tpd">Input tokens / day</label><input id="limit-tpd" class="input" type="number" min="0" step="1" placeholder="Optional" /></div>
+              <div class="field"><label class="label" for="limit-maxInputTokens">Max input / request</label><input id="limit-maxInputTokens" class="input" type="number" min="1" step="1" required /></div>
+              <div class="field"><label class="label" for="limit-maxOutputTokens">Max output / reply</label><input id="limit-maxOutputTokens" class="input" type="number" min="1" step="1" required /></div>
+            </div>
+            <p id="limits-usage" class="text-muted" role="status" aria-live="polite"></p>
+            <p class="text-muted limits-note">Counts cover this extension on this browser only, including prompts and context. Other apps may share your project quota. Daily budgets reset at midnight Pacific time. Failed attempts count too. For unlimited provider quotas, choose a personal cap; leave daily tokens blank to disable that cap.</p>
+            <p id="limits-error" class="field-error" role="alert" hidden></p>
+            <button id="save-model-limits" class="btn btn-primary" type="submit">Save custom budget</button>
+          </form>
+        </details>
+      </section>
 
-      <hr class="separator" />
-      <div class="section-heading">
-        <span class="section-title">General</span>
-        <span class="text-muted">Behaviour when you trigger an action.</span>
-      </div>
+      <section class="settings-group" aria-labelledby="settings-shortcuts-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="settings-shortcuts-title">Keyboard shortcuts</h2>
+          <span class="text-muted">Trigger actions without the context menu.</span>
+        </div>
 
-      <div class="card">
-        <div class="card-content">
-          <div class="switch-row">
-            <label class="label" for="autoSelectAll">Auto-select the whole field (<span id="shortcut-autoselect-label">Alt+Shift+F</span>)</label>
-            <input type="checkbox" id="autoSelectAll" class="switch" />
+        <div class="card">
+          <div class="card-content">
+            <div class="switch-row">
+              <span class="label">Fix spelling &amp; grammar</span>
+              <span id="shortcut-fix-grammar" class="kbd">Alt+Shift+F</span>
+            </div>
+            <hr class="separator" />
+            <div class="switch-row">
+              <span class="label">Fix selected text immediately</span>
+              <span id="shortcut-fix-selected" class="kbd">Alt+Shift+G</span>
+            </div>
+            <hr class="separator" />
+            <div class="switch-row">
+              <span class="label">Reply Assist</span>
+              <span id="shortcut-ai-prompt" class="kbd">Alt+Shift+A</span>
+            </div>
+            <hr class="separator" />
+            <div class="switch-row">
+              <span class="label">Review before applying (selection optional)</span>
+              <span id="shortcut-open-refine" class="kbd">Alt+Shift+R</span>
+            </div>
           </div>
         </div>
-      </div>
+
+        <div class="alert">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+          <span>Rebind these in <code>chrome://extensions/shortcuts</code>.</span>
+        </div>
+      </section>
+
+      <section class="settings-group" aria-labelledby="settings-about-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="settings-about-title">About</h2>
+          <span class="text-muted">Free and open source, made by one developer.</span>
+        </div>
+        <div class="card">
+          <div class="card-content">
+            <p class="about-text">Fix Errors AI fixes spelling, grammar and tone in any text field, using your own Gemini key or a local LM Studio model. If it saves you time, a GitHub star helps other people find it.</p>
+            <div class="about-actions">
+              <a class="btn btn-primary btn-sm" href="https://github.com/SanekxArcs/fix-errors-ex" target="_blank" rel="noopener noreferrer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+                </svg>
+                Star on GitHub
+                <span class="sr-only">(opens in a new tab)</span>
+              </a>
+              <a class="btn btn-outline btn-sm" href="https://buymeacoffee.com/sanekxarcs" target="_blank" rel="noopener noreferrer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 2v2" /><path d="M14 2v2" /><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" /><path d="M6 2v2" />
+                </svg>
+                Buy me a coffee
+                <span class="sr-only">(opens in a new tab)</span>
+              </a>
+            </div>
+            <p class="text-muted">Found a bug or have an idea? <a href="https://github.com/SanekxArcs/fix-errors-ex/issues" target="_blank" rel="noopener noreferrer">Open an issue<span class="sr-only"> (opens in a new tab)</span></a>.</p>
+          </div>
+        </div>
+      </section>
 
       <span class="save-status">Changes are saved automatically</span>
     </div>
 
     <!-- History View -->
-    <div id="history-view" class="tabs-content" role="tabpanel">
-      <div class="section-heading">
-        <span class="section-title">All-Time Stats</span>
-        <span class="text-muted">Totals across every edit you've made.</span>
-      </div>
-      <div id="history-stats" class="stats-grid">
-        <div class="stat-card">
-          <span id="stat-count" class="stat-value">0</span>
-          <span class="stat-label">Corrected</span>
+    <div id="history-view" class="tabs-content" role="tabpanel" aria-labelledby="view-history-btn" tabindex="0">
+      <section class="settings-group" aria-labelledby="history-stats-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="history-stats-title">All-Time Stats</h2>
+          <span class="text-muted">Totals across every edit you've made.</span>
         </div>
-        <div class="stat-card">
-          <span id="stat-time" class="stat-value">0s</span>
-          <span class="stat-label">Total Time</span>
+        <div id="history-stats" class="stats-grid">
+          <div class="stat-card">
+            <span id="stat-count" class="stat-value">0</span>
+            <span class="stat-label">Corrected</span>
+          </div>
+          <div class="stat-card">
+            <span id="stat-time" class="stat-value">0s</span>
+            <span class="stat-label">Total time</span>
+          </div>
+          <div class="stat-card">
+            <span id="stat-tokens" class="stat-value">0</span>
+            <span class="stat-label">Tokens</span>
+          </div>
         </div>
-        <div class="stat-card">
-          <span id="stat-tokens" class="stat-value">0</span>
-          <span class="stat-label">Tokens</span>
-        </div>
-      </div>
+      </section>
 
-      <hr class="separator" />
-
-      <div class="section-heading">
-        <span class="section-title">Recent Edits</span>
-        <span class="text-muted">The last 50 processed snippets.</span>
+      <section class="settings-group" aria-labelledby="history-list-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="history-list-title">Recent Edits</h2>
+          <span class="text-muted" id="history-list-note">Your latest edits, with the changes highlighted.</span>
+        </div>
+        <div id="history-list" class="list"></div>
+        <button type="button" id="history-more-btn" class="btn btn-outline btn-sm btn-block" hidden>Show older edits</button>
+      </section>
+      <div class="button-row">
+        <button type="button" id="export-history-btn" class="btn btn-outline">Export</button>
+        <button type="button" id="clear-history-btn" class="btn btn-destructive">Clear History</button>
       </div>
-      <div id="history-list" class="list"></div>
-      <button type="button" id="clear-history-btn" class="btn btn-destructive btn-block">Clear History</button>
+    </div>
+
+    <!-- Mistakes View -->
+    <div id="mistakes-view" class="tabs-content" role="tabpanel" aria-labelledby="view-mistakes-btn" tabindex="0">
+      <section class="settings-group" aria-labelledby="mistakes-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="mistakes-title">Frequent mistakes</h2>
+          <span class="text-muted" id="mistakes-note">Learned from your &ldquo;Fix spelling &amp; grammar&rdquo; edits. Stays on this device.</span>
+        </div>
+        <div id="mistakes-kinds" class="chip-row" role="group" aria-label="Filter by type"></div>
+        <div id="mistakes-list" class="list"></div>
+      </section>
+
+      <section class="settings-group" aria-labelledby="mistakes-summary-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="mistakes-summary-title">AI summary</h2>
+          <span class="text-muted">Sends your most frequent corrections (not your messages) to your AI provider and explains the patterns.</span>
+        </div>
+        <div class="card">
+          <div class="card-content">
+            <p id="mistakes-summary-text" class="mistakes-summary" hidden></p>
+            <p id="mistakes-summary-meta" class="text-muted" hidden></p>
+            <p id="mistakes-summary-error" class="field-error" role="alert" hidden></p>
+            <button type="button" id="mistakes-summary-btn" class="btn btn-outline btn-sm">Explain my mistakes</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="button-row">
+        <button type="button" id="export-mistakes-btn" class="btn btn-outline">Export</button>
+        <button type="button" id="reset-mistakes-btn" class="btn btn-destructive">Reset mistakes</button>
+      </div>
     </div>
 
     <!-- Prompts View -->
-    <div id="prompts-view" class="tabs-content" role="tabpanel">
-      <div class="section-heading">
-        <span class="section-title">System Prompts</span>
-        <span class="text-muted">Customize how the AI behaves for each action.</span>
-      </div>
-      <div id="prompts-list" class="list"></div>
-      <div class="form-actions">
-        <span class="save-status">Changes are saved automatically</span>
-        <button type="button" id="reset-prompts-btn" class="btn btn-outline btn-sm">Reset Defaults</button>
-      </div>
-    </div>
-
-    <!-- Shortcuts View -->
-    <div id="shortcuts-view" class="tabs-content" role="tabpanel">
-      <div class="section-heading">
-        <span class="section-title">Keyboard Shortcuts</span>
-        <span class="text-muted">Trigger actions without the context menu.</span>
-      </div>
-
-      <div class="card">
-        <div class="card-content">
-          <div class="switch-row">
-            <span class="label">Fix spelling &amp; grammar</span>
-            <span id="shortcut-fix-grammar" class="kbd">Alt+Shift+F</span>
-          </div>
-          <hr class="separator" />
-          <div class="switch-row">
-            <span class="label">Fix selected text immediately</span>
-            <span id="shortcut-fix-selected" class="kbd">Alt+Shift+G</span>
-          </div>
-          <hr class="separator" />
-          <div class="switch-row">
-            <span class="label">Reply Assist</span>
-            <span id="shortcut-ai-prompt" class="kbd">Alt+Shift+A</span>
-          </div>
-          <hr class="separator" />
-          <div class="switch-row">
-            <span class="label">Review before applying (selection optional)</span>
-            <span id="shortcut-open-refine" class="kbd">Alt+Shift+R</span>
-          </div>
+    <div id="prompts-view" class="tabs-content" role="tabpanel" aria-labelledby="view-prompts-btn" tabindex="0">
+      <section class="settings-group" aria-labelledby="prompts-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="prompts-title">System Prompts</h2>
+          <span class="text-muted">Edit the instruction sent to the AI for each action. Changes save automatically.</span>
         </div>
-      </div>
+        <div id="prompts-list" class="list"></div>
+      </section>
 
-      <div class="alert">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 16v-4" />
-          <path d="M12 8h.01" />
-        </svg>
-        <span>Rebind these in <code>chrome://extensions/shortcuts</code>.</span>
+      <section class="settings-group" aria-labelledby="prompts-none-title">
+        <div class="section-heading">
+          <h2 class="section-title" id="prompts-none-title">Actions without a prompt</h2>
+          <span class="text-muted">These actions don't use an editable instruction.</span>
+        </div>
+        <ul id="prompts-none-list" class="prompt-notes"></ul>
+      </section>
+
+      <div class="form-actions">
+        <span id="prompts-custom-status" class="save-status" role="status" tabindex="-1">All prompts use defaults</span>
+        <button type="button" id="reset-prompts-btn" class="btn btn-outline btn-sm" disabled>Reset all prompts</button>
       </div>
     </div>
 
     <script src="constants.js"></script>
     <script src="model-limits.js"></script>
+    <script src="learning.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

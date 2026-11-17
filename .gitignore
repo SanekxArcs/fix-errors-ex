@@ -4,3 +4,6 @@ desktop-app/build
 
 # Chrome Web Store upload packages built by zip-extension.sh
 extension for browsers/*.zip
+
+# Generated store screenshots, raw captures and promo video intermediates
+.artifacts/

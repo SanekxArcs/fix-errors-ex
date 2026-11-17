@@ -1,0 +1,37 @@
+{
+  "name": "Fix Errors AI",
+  "version": "2.0.13",
+  "category": "Tools",
+  "categoryGroup": "Productivity",
+  "categoryAlternative": "Communication",
+  "primaryLanguage": "English",
+  "locales": [
+    "en"
+  ],
+  "singlePurpose": "Fix Errors AI applies a writing action to text the user selects on a webpage and puts the result back in place. The user selects text, then picks an action from the \"AI Text Tools\" right-click menu or presses a keyboard shortcut: fix spelling and grammar, add polish, change tone, rewrite as an email, make shorter or longer, translate, format as Markdown or Slack, draft a reply that fits a conversation (Reply Assist), or review and edit the result before applying it. The text is sent to the AI provider the user configured, either Google Gemini with the user's own API key or an LM Studio server on the user's own computer, and the result replaces the selection or is copied. A keyboard-layout fix (Ukrainian/English) runs locally without AI.",
+  "remoteCode": false,
+  "remoteCodeExplanation": "All JavaScript, HTML and CSS ship in the package. content.js is a bundled file injected with chrome.scripting.executeScript({ files: [\"content.js\"] }). There is no eval, new Function, remote <script> or remote module. Gemini and LM Studio return JSON; the model's answer is treated as plain text and written into the page as text, never executed.",
+  "combinedHostJustification": "https://generativelanguage.googleapis.com/* sends the text the user selected (plus any context they typed into Reply Assist) to Google Gemini with the user's own API key when they run an action, and calls the same API's countTokens and model-metadata endpoints to respect model limits. http://localhost/* and http://127.0.0.1/* let the user use an LM Studio server on their own computer instead, at the address they entered (default http://localhost:1234). No website host access is requested: page access comes only from activeTab after a user gesture, in a single tab, and the manifest has no content_scripts.",
+  "dataUsage": {
+    "personallyIdentifiableInformation": false,
+    "healthInformation": false,
+    "financialAndPaymentInformation": false,
+    "authenticationInformation": true,
+    "personalCommunications": true,
+    "location": false,
+    "webHistory": false,
+    "userActivity": false,
+    "websiteContent": true
+  },
+  "certifications": {
+    "notSoldOrTransferredOutsideApprovedUseCases": true,
+    "notUsedForUnrelatedPurposes": true,
+    "notUsedForCreditworthiness": true
+  },
+  "homepage": "https://github.com/SanekxArcs/fix-errors-ex",
+  "support": "https://github.com/SanekxArcs/fix-errors-ex/issues",
+  "privacyPolicy": "https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html",
+  "officialUrl": null,
+  "googleAnalytics": null,
+  "matureContent": false
+}

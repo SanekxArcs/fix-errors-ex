@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="48" y1="32" x2="468" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#735CFF"/>
+      <stop offset="1" stop-color="#4027C8"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="142" y1="105" x2="379" y2="409" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E9E7FF"/>
+    </linearGradient>
+    <filter id="shadow" x="70" y="68" width="372" height="378" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="15" flood-color="#26118F" flood-opacity=".32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="409" cy="105" r="66" fill="#9A8CFF" fill-opacity=".22"/>
+  <circle cx="91" cy="406" r="90" fill="#25139B" fill-opacity=".16"/>
+  <g filter="url(#shadow)">
+    <rect x="112" y="104" width="288" height="304" rx="34" fill="url(#shine)"/>
+    <path d="M112 138c0-18.778 15.222-34 34-34h220c18.778 0 34 15.222 34 34v34H112v-34Z" fill="#252044"/>
+    <circle cx="146" cy="138" r="7" fill="#FF747E"/>
+    <circle cx="171" cy="138" r="7" fill="#FFCA68"/>
+    <circle cx="196" cy="138" r="7" fill="#56D9AB"/>
+    <path d="m154 228 35 28-35 28" stroke="#725BFA" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M209 284h61" stroke="#B5B1CF" stroke-width="16" stroke-linecap="round"/>
+    <path d="M154 331h73" stroke="#B5B1CF" stroke-width="16" stroke-linecap="round"/>
+    <path d="M250 331h20" stroke="#FF9F69" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <g>
+    <circle cx="355" cy="347" r="68" fill="#42D6A2" stroke="#4027C8" stroke-width="12"/>
+    <path d="m325 347 20 20 41-44" stroke="#123F3A" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="m346 204 8 22 22 8-22 8-8 22-8-22-22-8 22-8 8-22Z" fill="#FFF"/>
+</svg>

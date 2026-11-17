@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/SanekxArcs/fix-errors-ex/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/stars/SanekxArcs/fix-errors-ex.svg?variant=secondary" /></a>
   <a href="https://github.com/SanekxArcs/fix-errors-ex/commits/main"><img alt="Last commit" src="https://shieldcn.dev/github/last-commit/SanekxArcs/fix-errors-ex.svg?variant=secondary" /></a>
-  <img alt="Extension 2.0.13" src="https://shieldcn.dev/badge/extension-2.0.13-16A34A.svg?variant=secondary&logo=googlechrome" />
+  <img alt="Extension 2.1.0" src="https://shieldcn.dev/badge/extension-2.1.0-16A34A.svg?variant=secondary&logo=googlechrome" />
   <img alt="Desktop 1.2.0" src="https://shieldcn.dev/badge/desktop-1.2.0-0078D4.svg?variant=secondary&logo=electron" />
   <img alt="Bring your own AI" src="https://shieldcn.dev/badge/AI-bring%20your%20own-F59E0B.svg?variant=secondary&logo=googlegemini" />
   <img alt="No servers" src="https://shieldcn.dev/badge/servers-none-7C3AED.svg?variant=secondary&logo=shield" />
@@ -42,6 +42,7 @@ They share the same actions, the same prompts and the same "bring your own AI" m
 - **Budget guard rails.** Optional per-minute and per-day limits on requests and tokens, reserved before each call, so retries and parallel requests cannot blow past your quota.
 - **Fallback provider.** Gemini can fall back to LM Studio, and LM Studio to Gemini or another local model, when the primary fails or hits its budget.
 - **Editable prompts.** Every action's system prompt is yours to change in the Prompts tab.
+- **It shows what was wrong.** After a grammar fix the toast names the corrections, History highlights the changed words, and the Mistakes tab lists what you get wrong most often. All of it is worked out on your device and can be exported as JSON.
 - **Review mode.** `Alt+Shift+R` opens a panel with your text and an editable result before anything is applied.
 
 ## What it can do
@@ -102,7 +103,7 @@ select text ──► background worker ──► Gemini API  or  LM Studio (loc
                       ◄──────── result ──────────────┘
                       ▼
       content script replaces the selection, fires input/change events,
-      shows a toast, saves the entry to local history (last 50)
+      shows a toast, saves the entry to local history (last 500)
 ```
 
 Requests carry a 30-second timeout. The content script handles `<input>`, `<textarea>` and `contenteditable` editors and fires the events frameworks like React and Vue listen for, so the page sees the change as if you typed it.
@@ -176,6 +177,16 @@ npm run test:e2e    # builds the extension and drives it with Playwright
 - Nothing is collected, sold or shared. There are no servers in this project.
 
 Full text: [`extension for browsers/store/PRIVACY_POLICY.md`](extension%20for%20browsers/store/PRIVACY_POLICY.md).
+
+## Support the project
+
+Fix Errors AI is free, open source and built by one developer in their spare time. If it saves you time:
+
+- ⭐ **[Star the repo on GitHub](https://github.com/SanekxArcs/fix-errors-ex)**: it's free and helps other people find the project.
+- ☕ **[Buy me a coffee](https://buymeacoffee.com/sanekxarcs)**: keeps the updates coming.
+- 🐛 **[Open an issue](https://github.com/SanekxArcs/fix-errors-ex/issues)** to report a bug or suggest a feature.
+
+<a href="https://buymeacoffee.com/sanekxarcs"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" /></a>
 
 ## Contributing
 

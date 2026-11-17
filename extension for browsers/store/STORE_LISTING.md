@@ -58,7 +58,7 @@ You can customize the system prompt behind every single action, and choose a fal
 PRIVACY BY DESIGN
 • Your API key and settings are stored only on your device (chrome.storage.local) — never on our servers, because we don't have any servers.
 • Selected text is sent only to the AI provider you configured (Google Gemini or your own local LM Studio) to produce the result.
-• Your edit history (last 50 items) and all-time usage stats are kept locally on your device so you can review or clear them any time.
+• Your edit history (last 500 items), your most frequent mistakes and all-time usage stats are kept locally on your device so you can review, export or clear them any time.
 • We do not collect, sell, or share your data. See our Privacy Policy for details: https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html
 
 KEYBOARD SHORTCUTS

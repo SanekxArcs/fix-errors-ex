@@ -33,13 +33,25 @@ address, and preferences (e.g. auto-select, include-context, custom prompts) are
 only in `chrome.storage.local` on your own device. They are never transmitted to us and
 are only sent to the AI provider as part of making the request you asked for.
 
-**Edit history and usage stats.** The extension keeps a local record of your last 50
+**Edit history and usage stats.** The extension keeps a local record of your last 500
 text edits (original text, result, action used, response time, token usage) and
 running all-time totals (number of corrections, total time, total tokens), so you can
 review past edits and see your usage at a glance. This history is stored only in
 `chrome.storage.local` on your device. It is never sent to us, and you can clear it at
 any time from the extension's popup ("Clear History" button removes the detailed list;
 uninstalling the extension removes everything).
+
+**Frequent mistakes.** By comparing each original text with its fixed version, the
+extension builds a list of the corrections made most often to your writing (for example
+"teh → the", with a count and a short example from your text). The comparison runs on
+your device and the list is stored only in `chrome.storage.local`. You can clear it with
+the "Reset mistakes" button. If you press "Explain my mistakes", the most frequent
+corrections and their counts (not your messages and not the examples) are sent to the AI
+provider you configured, to write a short summary.
+
+**Export.** The "Export" button saves your edit history, usage totals and mistakes list
+as a JSON file on your own device. Your API key and settings are not included, and the
+file is not sent anywhere.
 
 ## What we do not do
 

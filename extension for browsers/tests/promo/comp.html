@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Fix Errors AI promo</title>
+    <style>
+      /* Palette from the extension's design tokens (popup.css / store images). */
+      :root { --accent: #b3c8ff; --accent2: #8fa9f0; --ok: #76cb9a; --bad: #ff8a8a; --ink: #eef1f8; --muted: #9aa6bd; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #06080c; }
+      body { font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+      #stage { position: absolute; left: 0; top: 0; overflow: hidden; background: #080b11; }
+      #bg { position: absolute; inset: 0; }
+      .blob { position: absolute; border-radius: 50%; }
+      #grid { position: absolute; inset: 0; background-image: linear-gradient(#ffffff07 1px, transparent 1px), linear-gradient(90deg, #ffffff07 1px, transparent 1px); background-size: 48px 48px; }
+      #vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, #000a 100%); }
+      #grain { position: absolute; inset: 0; pointer-events: none; opacity: 0.07; mix-blend-mode: overlay; }
+      #flash { position: absolute; inset: 0; pointer-events: none; }
+
+      /* Intro */
+      .typo { position: absolute; left: 0; top: 0; height: 62px; padding: 0 24px; display: flex; align-items: center; border-radius: 16px; white-space: nowrap;
+        background: linear-gradient(#171d29f2, #10151ef2); border: 1px solid #ffffff1c; box-shadow: 0 10px 30px #0008; font-size: 27px; font-weight: 600; color: #dfe5f2; }
+      .typo span { text-decoration: underline wavy var(--bad); text-decoration-thickness: 2px; text-underline-offset: 7px; }
+      .typo.fixed { border-color: #76cb9a55; }
+      .typo.fixed span { text-decoration-color: transparent; color: #c9f0d8; }
+      #familiar { position: absolute; text-align: center; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+      #logo { position: absolute; text-align: center; }
+      .icon { position: relative; margin: 0 auto; }
+      .icon img, .mini img { position: absolute; display: block; }
+      .icon img { filter: drop-shadow(0 0 1.5px #b3c8ff50); }
+      .mini { position: relative; }
+      #logo .name, #outro .name { font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+      #logo .tag { color: var(--muted); font-weight: 500; letter-spacing: -0.01em; }
+      #ring { position: absolute; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; }
+
+      /* Device: a browser window showing the real footage */
+      #device { position: absolute; left: 0; top: 0; }
+      #chrome { position: absolute; left: 0; top: 0; right: 0; height: 34px; background: #151b26; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid #ffffff12; }
+      #chrome .dots { display: flex; gap: 7px; }
+      #chrome .dots span { width: 10px; height: 10px; border-radius: 50%; background: #ffffff26; }
+      #chrome .omni { flex: 1; max-width: 420px; margin: 0 auto; height: 22px; border-radius: 11px; background: #0c1018; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11.5px; color: #8e9ab0; }
+      #chrome .omni i { width: 9px; height: 9px; border-radius: 3px; background: #ffffff2a; }
+      #chrome .ext { width: 18px; height: 18px; position: relative; }
+      #screen { position: absolute; left: 0; top: 34px; right: 0; bottom: 0; overflow: hidden; background: #f4f5f8; }
+      #cam { position: absolute; left: 0; top: 0; width: 960px; height: 600px; transform-origin: 0 0; }
+      #cam img { position: absolute; left: 0; top: 0; width: 960px; height: 600px; }
+      #frameline { position: absolute; inset: 0; pointer-events: none; }
+      #cursor { position: absolute; left: 0; top: 0; width: 17px; height: 25px; transform-origin: 2px 2px; filter: drop-shadow(0 2px 3px #0007); }
+      .ripple { position: absolute; left: 0; top: 0; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; opacity: 0; }
+      #ripple { border: 2px solid #3a5bd9; }
+      #ripple2 { background: #3a5bd9; }
+      #shine { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 35%, #ffffff1c 50%, transparent 65%); opacity: 0; }
+      #keys { position: absolute; left: 28px; right: 0; bottom: 96px; display: flex; justify-content: flex-start; align-items: center; gap: 10px; opacity: 0; }
+      #keys kbd { font: 700 26px/1 'Segoe UI', system-ui, sans-serif; color: #eef1f8; background: linear-gradient(#232b3b, #151b26); border: 1px solid #ffffff2e; border-bottom-width: 4px; border-radius: 12px; padding: 13px 20px 11px; box-shadow: 0 14px 34px #0007; }
+      #keys b { font-size: 26px; color: #1d2433; font-weight: 700; }
+
+      /* Captions */
+      .cap { position: absolute; }
+      .cap .eb { font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+      .cap h2 { font-weight: 800; letter-spacing: -0.045em; line-height: 1.04; }
+      .cap .sub { color: var(--muted); font-weight: 500; line-height: 1.45; letter-spacing: -0.01em; }
+      em { font-style: normal; color: var(--accent); }
+      .w { display: inline-block; white-space: pre; }
+
+      #privacy, #outro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #privacy .line { font-weight: 800; letter-spacing: -0.05em; line-height: 1.06; }
+      #privacy .note { color: var(--muted); font-weight: 500; line-height: 1.5; }
+      #outro .tag { color: #d9e0ee; font-weight: 600; letter-spacing: -0.02em; }
+      #outro .meta { color: var(--muted); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div><div class="blob" id="b3"></div></div>
+      <div id="grid"></div>
+      <div id="intro"></div>
+      <div id="device">
+        <div id="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="omni"><i></i><span id="url"></span></div><div class="ext" id="extIcon"></div></div>
+        <div id="screen">
+          <div id="cam">
+            <img id="fa" /><img id="fb" />
+            <div class="ripple" id="ripple2"></div>
+            <div class="ripple" id="ripple"></div>
+            <svg id="cursor" viewBox="0 0 17 25"><path d="M1.5 1.5 L1.5 19.5 L6 15.3 L9.2 22.6 L12.3 21.3 L9.2 14.2 L15.2 14.2 Z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round" /></svg>
+          </div>
+          <div id="keys"></div>
+          <div id="shine"></div>
+        </div>
+        <div id="frameline"></div>
+      </div>
+      <div id="caps"></div>
+      <div id="privacy"></div>
+      <div id="outro"></div>
+      <div id="vignette"></div>
+      <canvas id="grain"></canvas>
+      <div id="flash"></div>
+    </div>
+    <script>
+      window.LANG = new URLSearchParams(location.search).get('lang') || 'en';
+      document.documentElement.lang = window.LANG;
+      document.write(`<script src="../../../.artifacts/promo/${window.LANG}/clips.js"><\/script>`);
+    </script>
+    <script src="comp-text.js"></script>
+    <script src="comp.js"></script>
+  </body>
+</html>

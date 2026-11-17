@@ -1,0 +1,1 @@
+Fix grammar, change tone, translate and draft replies in any text field, with your own Gemini key or a local LM Studio model.

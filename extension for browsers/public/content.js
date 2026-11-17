@@ -24,7 +24,7 @@ if (!window.lbxFixErrorsInjected) {
       restoreSavedSelection();
       sendResponse({ status: "done" });
     } else if (request.action === "showToast") {
-      showToast(request.message, request.type, { copyText: request.copyText, timeoutMs: request.timeoutMs });
+      showToast(request.message, request.type, { copyText: request.copyText, timeoutMs: request.timeoutMs, durationMs: request.durationMs });
       if (sendResponse) sendResponse({ status: "done" });
     } else if (request.action === "showReplyAssistModal") {
       showReplyAssistPanel(request.selectedText);
@@ -237,26 +237,40 @@ if (!window.lbxFixErrorsInjected) {
   }
 
   // ── Injected UI ─────────────────────────────────────────────────────────
-  // The toast and panels below follow the shadcn/ui design language (slate base,
-  // blue accent, 0.5rem radius), but are written as inline styles rather than a
-  // stylesheet so no host-page CSS can bleed into them.
+  // The toast and panels below share the popup's design system (popup.css:
+  // slate surface, pale periwinkle primary, 12/13/14/16 type scale, 8/10/12
+  // radii), but are written as inline styles rather than a stylesheet so no
+  // host-page CSS can bleed into them. Every value mirrors a popup token.
   const UI = {
-    bg: "#020817",
-    subtle: "#0b1324",
-    fg: "#f8fafc",
-    muted: "#1e293b",
-    mutedHover: "#273549",
-    mutedFg: "#94a3b8",
-    border: "#1e293b",
-    primary: "#3b82f6",
-    primaryHover: "#5b9bf8",
-    primaryFg: "#0f172a",
-    destructive: "#f87171",
-    success: "#4ade80",
+    bg: "#181f2a",           // panel surface (popup --card)
+    field: "#10151e",        // inputs, textareas, selects (popup --background)
+    fg: "#e8ebf3",
+    secondaryFg: "#dfe3ec",
+    muted: "#1f2937",
+    mutedHover: "#273345",
+    mutedFg: "#97a1af",
+    border: "#303b4a",
+    primary: "#b3c8ff",
+    primaryHover: "#a4b7ea",
+    primaryFg: "#172136",
+    destructive: "#ef8f8f",
+    destructiveBorder: "rgba(239,143,143,.35)",
+    success: "#76cb9a",
+    successBorder: "rgba(118,203,154,.35)",
+    ring: "#7e9dec",
+    text: { xs: "12px", sm: "13px", base: "14px", lg: "16px" },
+    leading: { tight: 1.25, snug: 1.4, normal: 1.5 },
+    weight: { regular: 400, medium: 500, semibold: 600 },
+    radius: { sm: "8px", md: "10px", lg: "12px", pill: "999px" },
+    disabledOpacity: 0.5,
     font: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-    shadow: "0 10px 15px -3px rgba(0,0,0,0.45), 0 4px 6px -4px rgba(0,0,0,0.45)"
+    shadow: "0 12px 28px -6px rgba(0,0,0,.45), 0 4px 10px -4px rgba(0,0,0,.35)"
   };
+
+  // Text properties host pages commonly set on button/div/textarea; every
+  // light-DOM node we build resets them so the page cannot restyle our text.
+  const TEXT_RESET = "letter-spacing:normal;text-transform:none;font-style:normal;";
 
   // Lucide icons — the same set shadcn/ui ships with.
   const ICON = {
@@ -268,63 +282,206 @@ if (!window.lbxFixErrorsInjected) {
     rotate: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1.06 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
   };
 
-  // Keyframes can't live in an inline style attribute, so inject them once under
-  // a prefixed name that won't collide with anything on the host page.
+  // Reduced motion: transitions and spinners collapse to a single instant frame.
+  // The spinner may then sit still, which is fine: it always has text beside it.
+  const REDUCED_MOTION = selector =>
+    `${selector}{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}`;
+
+  // Panels are small non-modal dialogs: Tab and Shift+Tab cycle inside them
+  // while focus is inside. `root` is the panel's shadow root, or document.
+  function trapTabKey(event, container, root) {
+    if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
+    const focusable = [...container.querySelectorAll("button, select, textarea, input, [href], [tabindex]:not([tabindex='-1'])")]
+      .filter(el => !el.disabled && el.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const current = root.activeElement;
+    const outside = !focusable.includes(current);
+    if (event.shiftKey && (current === first || outside)) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (current === last || outside)) {
+      event.preventDefault(); first.focus();
+    }
+  }
+
+  // The element that really has focus, looking through open shadow roots.
+  function focusedElement() {
+    let el = document.activeElement;
+    while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+    return el;
+  }
+
+  // Hand focus back to where it was before a panel opened, if it still exists.
+  function returnFocus(previous, panel) {
+    if (savedSelectionInfo?.element?.isConnected) { restoreSavedSelection(); return; }
+    if (previous?.isConnected && !panel?.contains(previous) && previous !== document.body) {
+      try { previous.focus({ preventScroll: true }); } catch { /* not focusable */ }
+    }
+  }
+
+  // Toast and retry picker share the bottom-right corner with the Review and
+  // Reply panels. Bottom up the stack is: panel -> toast -> picker, 8px apart.
+  // With no panel the toast sits at 20px and the picker at 76px, as before.
+  // If there's no room above the panel (short viewports) they move to the free
+  // area left of it, or, when the panel spans the width, just below its header
+  // so the title and close button stay visible and clickable (the toast itself
+  // is click-through; only its own buttons take clicks).
+  const STACK_GAP = 8;
+
+  function openPanels() {
+    return [document.getElementById("lbx-inline-review"), document.getElementById("lbx-reply-assist-panel")]
+      .filter(node => node?.isConnected);
+  }
+
+  function panelHeaderBottom(panel) {
+    const header = panel.shadowRoot ? panel.shadowRoot.querySelector(".top") : panel.firstElementChild;
+    return (header || panel).getBoundingClientRect().bottom;
+  }
+
+  function restackFloatingUI() {
+    const toast = document.getElementById("lbx-ai-toast");
+    const picker = document.getElementById("lbx-model-picker-panel");
+    const items = [toast, picker].filter(node => node?.isConnected);
+    if (!items.length) return;
+    for (const el of items) {
+      el.style.top = "auto";
+      el.style.left = "auto";
+      el.style.right = "20px";
+      el.style.maxWidth = el === toast ? "min(360px, calc(100% - 40px))" : "";
+    }
+    const panels = openPanels();
+    if (!panels.length) {
+      if (toast) toast.style.bottom = "20px";
+      if (picker) picker.style.bottom = `${toast ? 20 + toast.offsetHeight + STACK_GAP : 76}px`;
+      return;
+    }
+    // Panels use the maximum z-index too, so the toast/picker must come later
+    // in the DOM to paint above them.
+    for (const el of items) {
+      if (panels.some(panel => panel.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)) {
+        document.documentElement.appendChild(el);
+      }
+    }
+    const rects = panels.map(panel => panel.getBoundingClientRect());
+    const panelTop = Math.min(...rects.map(r => r.top));
+    const panelLeft = Math.min(...rects.map(r => r.left));
+    const viewportHeight = window.innerHeight;
+    const stackHeight = () => items.reduce((sum, el) => sum + el.offsetHeight, 0) + STACK_GAP * (items.length - 1);
+
+    if (panelTop - STACK_GAP - stackHeight() >= 12) {
+      let bottom = viewportHeight - panelTop + STACK_GAP;
+      for (const el of items) {
+        el.style.bottom = `${Math.round(bottom)}px`;
+        bottom += el.offsetHeight + STACK_GAP;
+      }
+      return;
+    }
+
+    const freeLeft = panelLeft - 20 - STACK_GAP;
+    if (freeLeft >= 240) {
+      let bottom = 20;
+      for (const el of items) {
+        el.style.right = "auto";
+        el.style.left = "20px";
+        el.style.maxWidth = `${Math.floor(Math.min(360, freeLeft))}px`;
+        el.style.bottom = `${bottom}px`;
+        bottom += el.offsetHeight + STACK_GAP;
+      }
+      return;
+    }
+
+    const headerBottom = Math.max(...panels.map(panelHeaderBottom));
+    let top = Math.max(12, Math.min(headerBottom + STACK_GAP, viewportHeight - stackHeight() - 12));
+    for (const el of items) {
+      el.style.bottom = "auto";
+      el.style.top = `${Math.round(top)}px`;
+      top += el.offsetHeight + STACK_GAP;
+    }
+  }
+
+  // Re-stack when the viewport changes or an open panel resizes (e.g. the user
+  // drags a textarea taller), at most once per frame.
+  let restackFrame = 0;
+  function scheduleRestack() {
+    if (restackFrame) return;
+    restackFrame = requestAnimationFrame(() => { restackFrame = 0; restackFloatingUI(); });
+  }
+  window.addEventListener("resize", scheduleRestack);
+  const panelResizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(scheduleRestack) : null;
+  function watchPanel(panel) { panelResizeObserver?.observe(panel); }
+  function unwatchPanel(panel) { if (panel) panelResizeObserver?.unobserve(panel); }
+
+  // Keyframes and :focus-visible can't live in an inline style attribute, so
+  // inject them once under prefixed names that won't collide with the host page.
+  // The focus ring matches the popup's: 2px outline in the ring colour, 2px
+  // offset (the offset always lands on our own panel background).
   function ensureKeyframes() {
     if (document.getElementById("lbx-ai-keyframes")) return;
     const style = document.createElement("style");
     style.id = "lbx-ai-keyframes";
-    style.textContent = "@keyframes lbx-spin{to{transform:rotate(360deg)}}";
+    style.textContent = "@keyframes lbx-spin{to{transform:rotate(360deg)}}" +
+      `[data-lbx-ui] :focus-visible{outline:2px solid ${UI.ring}!important;outline-offset:2px!important}` +
+      `[data-lbx-ui] button:disabled{opacity:${UI.disabledOpacity}!important;cursor:default!important}` +
+      `@media (prefers-reduced-motion: reduce){${REDUCED_MOTION("[data-lbx-ui],[data-lbx-ui] *")}}`;
     (document.head || document.documentElement).appendChild(style);
   }
 
-  // shadcn button variants/sizes, expressed as inline style strings.
+  // Button variants/sizes mirroring popup.css .btn-*, as inline style strings.
   const BUTTON_VARIANTS = {
     primary: { base: UI.primary, fg: UI.primaryFg, hover: UI.primaryHover, border: "transparent" },
-    secondary: { base: UI.muted, fg: UI.fg, hover: UI.mutedHover, border: "transparent" },
-    outline: { base: "transparent", fg: UI.fg, hover: UI.muted, border: UI.border },
-    ghost: { base: "transparent", fg: UI.mutedFg, hover: UI.muted, border: "transparent" },
-    translucent: { base: "rgba(255,255,255,0.10)", fg: UI.fg, hover: "rgba(255,255,255,0.18)", border: "transparent" }
+    secondary: { base: UI.muted, fg: UI.secondaryFg, hover: UI.mutedHover, border: "transparent" },
+    outline: { base: UI.field, fg: UI.fg, hover: UI.muted, border: UI.border },
+    ghost: { base: "transparent", fg: UI.fg, hover: UI.muted, border: "transparent" }
   };
 
   const BUTTON_SIZES = {
-    default: "height:30px;padding:0 12px;font-size:12px;",
-    sm: "height:26px;padding:0 10px;font-size:11.5px;",
-    icon: "height:24px;width:24px;padding:0;"
+    default: `height:32px;padding:0 12px;border-radius:${UI.radius.md};`,
+    sm: `height:28px;padding:0 10px;border-radius:${UI.radius.sm};`,
+    icon: `height:28px;width:28px;padding:0;border-radius:${UI.radius.sm};`
   };
 
-  function makeButton(label, { variant = "secondary", size = "default", icon = "", title = "" } = {}) {
+  function makeButton(label, { variant = "secondary", size = "default", icon = "", title = "", ariaLabel = "" } = {}) {
     const v = BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.secondary;
+    // Icon-only ghost buttons (close / cancel) stay quiet until hovered.
+    const fg = variant === "ghost" && size === "icon" ? UI.mutedFg : v.fg;
     const btn = document.createElement("button");
     btn.type = "button";
     if (title) btn.title = title;
-    btn.innerHTML = icon + (label ? `<span>${label}</span>` : "");
+    // Icon-only buttons always get an accessible name.
+    if (ariaLabel || (!label && title)) btn.setAttribute("aria-label", ariaLabel || title);
+    btn.innerHTML = icon + (label ? `<span style="${TEXT_RESET}">${label}</span>` : "");
     alignInjectedIcons(btn);
     btn.style.cssText = `
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:6px;
+      box-sizing:border-box;
+      margin:0;
+      flex-shrink:0;
       ${BUTTON_SIZES[size] || BUTTON_SIZES.default}
       border:1px solid ${v.border};
-      border-radius:6px;
       background:${v.base};
-      color:${v.fg};
+      color:${fg};
       font-family:${UI.font};
-      font-weight:500;
-      line-height:1;
+      font-size:${UI.text.sm};
+      font-weight:${UI.weight.medium};
+      line-height:${UI.leading.tight};
+      ${TEXT_RESET}
       white-space:nowrap;
       cursor:pointer;
       pointer-events:auto;
       transition:background-color .15s, color .15s, border-color .15s;
     `;
     btn.onmouseover = () => {
+      if (btn.disabled) return;
       btn.style.background = v.hover;
       if (variant === "ghost" || variant === "outline") btn.style.color = UI.fg;
     };
     btn.onmouseout = () => {
       btn.style.background = v.base;
-      btn.style.color = v.fg;
+      btn.style.color = fg;
     };
     return btn;
   }
@@ -338,7 +495,7 @@ if (!window.lbxFixErrorsInjected) {
   function makeLabel(text) {
     const el = document.createElement("div");
     el.textContent = text;
-    el.style.cssText = `font-size:11.5px;font-weight:500;line-height:1.3;color:${UI.fg};margin-bottom:6px;`;
+    el.style.cssText = `display:block;margin:0 0 6px;font-family:${UI.font};font-size:${UI.text.sm};font-weight:${UI.weight.medium};line-height:${UI.leading.tight};color:${UI.fg};${TEXT_RESET}`;
     return el;
   }
 
@@ -348,14 +505,17 @@ if (!window.lbxFixErrorsInjected) {
     el.style.cssText = `
       display:inline-flex;
       align-items:center;
-      padding:1px 5px;
+      padding:2px 7px;
       border:1px solid ${UI.border};
-      border-radius:4px;
+      border-radius:${UI.radius.sm};
       background:${UI.muted};
-      color:${UI.mutedFg};
+      color:${UI.fg};
       font-family:${UI.mono};
-      font-size:10px;
-      line-height:1.5;
+      font-size:${UI.text.xs};
+      font-weight:${UI.weight.regular};
+      line-height:${UI.leading.tight};
+      white-space:nowrap;
+      ${TEXT_RESET}
     `;
     return el;
   }
@@ -395,6 +555,7 @@ if (!window.lbxFixErrorsInjected) {
     if (!toast) {
       toast = document.createElement("div");
       toast.id = toastId;
+      toast.setAttribute("data-lbx-ui", "");
       document.body.appendChild(toast);
     }
 
@@ -404,6 +565,10 @@ if (!window.lbxFixErrorsInjected) {
     clearTimeout(toast._removeTimer);
     clearInterval(toast._elapsedTimer);
     toast.dataset.type = type;
+    // Live region only: a toast never takes focus.
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
+    toast.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
+    toast.setAttribute("aria-atomic", "true");
 
     toast.style.cssText = `
       position: fixed;
@@ -412,22 +577,26 @@ if (!window.lbxFixErrorsInjected) {
       display: flex;
       align-items: center;
       gap: 10px;
-      max-width: 360px;
-      padding: 11px 13px;
+      box-sizing: border-box;
+      max-width: min(360px, calc(100% - 40px));
+      padding: 10px 12px;
       border: 1px solid ${UI.border};
-      border-radius: 10px;
+      border-radius: ${UI.radius.lg};
       background: ${UI.bg};
       color: ${UI.fg};
       font-family: ${UI.font};
-      font-size: 13px;
-      font-weight: 500;
-      line-height: 1.4;
+      font-size: ${UI.text.sm};
+      font-weight: ${UI.weight.medium};
+      line-height: ${UI.leading.snug};
+      ${TEXT_RESET}
+      text-align: left;
       box-shadow: ${UI.shadow};
-      z-index: 1000000;
+      z-index: 2147483647;
+      margin: 0 !important;
       opacity: 1;
-      transform: translateY(0);
-      transition: opacity .25s ease, transform .25s cubic-bezier(0.32, 0.72, 0, 1);
-      pointer-events: none;
+      transform: none !important;
+      transition: opacity .25s ease;
+      pointer-events: none !important;
     `;
 
     const statuses = {
@@ -443,13 +612,14 @@ if (!window.lbxFixErrorsInjected) {
 
     const iconWrap = document.createElement("span");
     iconWrap.innerHTML = status.icon;
+    iconWrap.setAttribute("aria-hidden", "true");
     alignInjectedIcons(iconWrap);
-    iconWrap.style.cssText = `display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px;height:14px;color:${status.color};`;
+    iconWrap.style.cssText = `display:flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px;height:14px;color:${status.color};${TEXT_RESET}`;
     toast.appendChild(iconWrap);
 
     const textSpan = document.createElement("span");
     textSpan.innerText = message;
-    textSpan.style.cssText = "flex:1;min-width:0;";
+    textSpan.style.cssText = `flex:1;min-width:0;${TEXT_RESET}`;
     toast.appendChild(textSpan);
 
     if (type === "working") {
@@ -457,7 +627,7 @@ if (!window.lbxFixErrorsInjected) {
       // request (e.g. "Trying fallback") keep counting from the first.
       if (!toast._workingSince) toast._workingSince = Date.now();
       const elapsed = document.createElement("span");
-      elapsed.style.cssText = `flex-shrink:0;color:${UI.mutedFg};font-variant-numeric:tabular-nums;font-size:12px;`;
+      elapsed.style.cssText = `flex-shrink:0;color:${UI.mutedFg};font-variant-numeric:tabular-nums;font-size:${UI.text.xs};line-height:${UI.leading.tight};${TEXT_RESET}`;
       const tick = () => { elapsed.textContent = `${Math.floor((Date.now() - toast._workingSince) / 1000)}s`; };
       tick();
       toast._elapsedTimer = setInterval(tick, 1000);
@@ -472,7 +642,8 @@ if (!window.lbxFixErrorsInjected) {
         variant: "ghost",
         size: "icon",
         icon: ICON.x,
-        title: "Cancel (Alt+Shift+Esc)"
+        title: "Cancel (Alt+Shift+Esc)",
+        ariaLabel: "Cancel request"
       });
       cancelBtn.style.marginLeft = "2px";
       cancelBtn.onclick = cancelActiveJob;
@@ -518,17 +689,19 @@ if (!window.lbxFixErrorsInjected) {
         variant: "ghost",
         size: "icon",
         icon: ICON.x,
-        title: "Dismiss"
+        title: "Dismiss notification"
       });
       closeBtn.style.marginLeft = "2px";
       closeBtn.onclick = () => hideToast(toast);
       toast.appendChild(closeBtn);
     }
 
+    restackFloatingUI();
+
     if (type !== "working") toast._workingSince = null;
     // Retry notices allow more time, but always expire.
     if (type !== "working" && !options.copyText) {
-      toast._hideTimer = setTimeout(() => hideToast(toast), options.onRetry ? 15000 : 4000);
+      toast._hideTimer = setTimeout(() => hideToast(toast), options.onRetry ? 15000 : options.durationMs || 4000);
     } else if (type === "working") {
       // Safety net: if the background worker dies mid-request no final toast
       // ever arrives. Say so instead of spinning forever or vanishing silently.
@@ -554,37 +727,44 @@ if (!window.lbxFixErrorsInjected) {
     const existing = document.getElementById("lbx-model-picker-panel");
     if (existing) existing._dismiss();
 
+    ensureKeyframes();
     const panel = document.createElement("div");
     panel.id = "lbx-model-picker-panel";
+    panel.setAttribute("data-lbx-ui", "");
     panel.style.cssText = `
       position: fixed;
       bottom: 76px;
       right: 20px;
-      width: 290px;
+      box-sizing: border-box;
+      width: min(290px, calc(100% - 40px));
       border: 1px solid ${UI.border};
-      border-radius: 10px;
+      border-radius: ${UI.radius.lg};
       background: ${UI.bg};
       color: ${UI.fg};
       font-family: ${UI.font};
+      font-size: ${UI.text.sm};
+      line-height: ${UI.leading.snug};
+      ${TEXT_RESET}
       box-shadow: ${UI.shadow};
-      z-index: 1000002;
+      z-index: 2147483647;
       overflow: hidden;
     `;
 
     const header = document.createElement("div");
     header.textContent = "Retry with model";
     header.style.cssText = `
-      padding: 9px 12px 8px;
+      padding: 10px 14px 8px;
       border-bottom: 1px solid ${UI.border};
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-family: ${UI.font};
+      font-size: ${UI.text.xs};
+      font-weight: ${UI.weight.medium};
+      line-height: ${UI.leading.tight};
+      ${TEXT_RESET}
       color: ${UI.mutedFg};
     `;
 
     const list = document.createElement("div");
-    list.style.cssText = "padding:4px;max-height:260px;overflow-y:auto;";
+    list.style.cssText = `padding:4px;max-height:260px;overflow-y:auto;${TEXT_RESET}`;
 
     models.forEach(m => {
       const btn = document.createElement("button");
@@ -594,19 +774,24 @@ if (!window.lbxFixErrorsInjected) {
         display: block;
         width: 100%;
         text-align: left;
-        padding: 7px 9px;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 8px 10px;
         border: none;
-        border-radius: 6px;
+        border-radius: ${UI.radius.sm};
         background: transparent;
-        color: ${UI.mutedFg};
-        font-family: inherit;
-        font-size: 12px;
-        line-height: 1.35;
+        color: ${UI.fg};
+        font-family: ${UI.font};
+        font-size: ${UI.text.sm};
+        font-weight: ${UI.weight.regular};
+        line-height: ${UI.leading.snug};
+        ${TEXT_RESET}
+        white-space: normal;
         cursor: pointer;
-        transition: background-color .12s, color .12s;
+        transition: background-color .12s;
       `;
-      btn.onmouseover = () => { btn.style.background = UI.muted; btn.style.color = UI.fg; };
-      btn.onmouseout = () => { btn.style.background = "transparent"; btn.style.color = UI.mutedFg; };
+      btn.onmouseover = () => { btn.style.background = UI.muted; };
+      btn.onmouseout = () => { btn.style.background = "transparent"; };
       btn.onclick = () => {
         panel._dismiss();
         chrome.runtime.sendMessage({ action: "retryAI", model: m.id, provider: m.provider });
@@ -617,6 +802,7 @@ if (!window.lbxFixErrorsInjected) {
     panel.appendChild(header);
     panel.appendChild(list);
     document.body.appendChild(panel);
+    restackFloatingUI();
 
     const closeOnOutside = event => { if (!panel.contains(event.target)) panel._dismiss(); };
     const closeOnEscape = event => { if (event.key === "Escape") panel._dismiss(); };
@@ -638,100 +824,125 @@ if (!window.lbxFixErrorsInjected) {
   // panel only collects context.
   function showReplyAssistPanel(selectedText) {
     const existing = document.getElementById("lbx-reply-assist-panel");
-    if (existing) existing.remove();
+    if (existing) { unwatchPanel(existing); existing.remove(); }
+    const previousFocus = focusedElement();
 
+    ensureKeyframes();
     const panel = document.createElement("div");
     panel.id = "lbx-reply-assist-panel";
+    panel.setAttribute("data-lbx-ui", "");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "false");
+    panel.setAttribute("aria-labelledby", "lbx-reply-assist-title");
+    panel.setAttribute("aria-describedby", "lbx-reply-assist-desc");
     panel.style.cssText = `
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 340px;
+      box-sizing: border-box;
+      width: min(340px, calc(100% - 40px));
       border: 1px solid ${UI.border};
-      border-radius: 12px;
+      border-radius: ${UI.radius.lg};
       background: ${UI.bg};
       color: ${UI.fg};
       font-family: ${UI.font};
+      font-size: ${UI.text.sm};
+      line-height: ${UI.leading.normal};
+      ${TEXT_RESET}
+      text-align: left;
       box-shadow: ${UI.shadow};
-      z-index: 1000001;
+      z-index: 2147483647;
       overflow: hidden;
+      display: block !important;
+      margin: 0 !important;
+      transform: none !important;
+      pointer-events: auto !important;
     `;
 
     // Header
     const header = document.createElement("div");
     header.style.cssText = `
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 8px;
-      padding: 12px 14px 11px;
-      border-bottom: 1px solid ${UI.border};
+      padding: 14px 12px 0 16px;
+      ${TEXT_RESET}
     `;
 
     const titleWrap = document.createElement("div");
+    titleWrap.style.cssText = `min-width:0;flex:1;padding-top:2px;${TEXT_RESET}`;
 
     const titleEl = document.createElement("div");
+    titleEl.id = "lbx-reply-assist-title";
     titleEl.textContent = "Reply Assist";
-    titleEl.style.cssText = `font-size:13.5px;font-weight:600;letter-spacing:-0.01em;color:${UI.fg};`;
+    titleEl.style.cssText = `font-family:${UI.font};font-size:${UI.text.base};font-weight:${UI.weight.semibold};line-height:${UI.leading.tight};color:${UI.fg};${TEXT_RESET}`;
 
     const descEl = document.createElement("div");
+    descEl.id = "lbx-reply-assist-desc";
     descEl.textContent = "Refine the selected text in context.";
-    descEl.style.cssText = `font-size:11.5px;color:${UI.mutedFg};margin-top:2px;`;
+    descEl.style.cssText = `font-family:${UI.font};font-size:${UI.text.sm};font-weight:${UI.weight.regular};line-height:${UI.leading.snug};color:${UI.mutedFg};margin-top:4px;${TEXT_RESET}`;
 
     titleWrap.appendChild(titleEl);
     titleWrap.appendChild(descEl);
 
-    const closeBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Close" });
+    const closeBtn = makeButton("", { variant: "ghost", size: "icon", icon: ICON.x, title: "Close", ariaLabel: "Close Reply Assist" });
 
     header.appendChild(titleWrap);
     header.appendChild(closeBtn);
 
     // Body
     const body = document.createElement("div");
-    body.style.cssText = "padding:12px 14px 12px;";
+    body.style.cssText = `padding:14px 16px 16px;${TEXT_RESET}`;
 
     const preview = document.createElement("div");
     const previewText = selectedText.length > 90 ? selectedText.slice(0, 90) + "…" : selectedText;
     preview.textContent = previewText;
     preview.style.cssText = `
+      box-sizing: border-box;
       padding: 8px 10px;
-      margin-bottom: 12px;
+      margin: 0 0 16px;
       border: 1px solid ${UI.border};
-      border-left: 2px solid ${UI.primary};
-      border-radius: 6px;
-      background: ${UI.subtle};
+      border-radius: ${UI.radius.md};
+      background: ${UI.field};
       color: ${UI.mutedFg};
-      font-size: 11.5px;
-      line-height: 1.5;
+      font-family: ${UI.font};
+      font-size: ${UI.text.sm};
+      line-height: ${UI.leading.normal};
+      ${TEXT_RESET}
       word-break: break-word;
     `;
 
     const textarea = document.createElement("textarea");
     textarea.placeholder = "Paste conversation, describe tone, or add instructions…";
+    textarea.setAttribute("aria-label", "Context (optional)");
     textarea.rows = 3;
     textarea.style.cssText = `
+      display: block;
       width: 100%;
-      min-height: 68px;
+      min-height: 72px;
+      margin: 0;
       padding: 8px 10px;
       border: 1px solid ${UI.border};
-      border-radius: 6px;
-      background: ${UI.bg};
+      border-radius: ${UI.radius.md};
+      background: ${UI.field};
       color: ${UI.fg};
-      font-family: inherit;
-      font-size: 12.5px;
-      line-height: 1.5;
+      font-family: ${UI.font};
+      font-size: ${UI.text.base};
+      line-height: ${UI.leading.normal};
+      ${TEXT_RESET}
       resize: vertical;
       box-sizing: border-box;
       outline: none;
+      pointer-events: auto !important;
       transition: border-color .15s, box-shadow .15s;
     `;
+    // The ring itself comes from the shared [data-lbx-ui] :focus-visible rule.
     textarea.addEventListener("focus", () => {
-      textarea.style.borderColor = UI.primary;
-      textarea.style.boxShadow = `0 0 0 1px ${UI.primary}`;
+      textarea.style.borderColor = UI.ring;
     });
     textarea.addEventListener("blur", () => {
       textarea.style.borderColor = UI.border;
-      textarea.style.boxShadow = "none";
     });
 
     body.appendChild(makeLabel("Refining"));
@@ -745,26 +956,32 @@ if (!window.lbxFixErrorsInjected) {
       display: flex;
       gap: 8px;
       align-items: center;
-      padding: 11px 14px 13px;
+      padding: 12px 16px;
       border-top: 1px solid ${UI.border};
+      ${TEXT_RESET}
     `;
 
     const hint = document.createElement("div");
-    hint.style.cssText = "display:flex;align-items:center;gap:4px;margin-right:auto;";
+    hint.style.cssText = `display:flex;align-items:center;gap:4px;margin-right:auto;min-width:0;${TEXT_RESET}`;
     hint.appendChild(makeKbd("Ctrl+↵"));
     hint.appendChild(makeKbd("Esc"));
 
-    const cancelBtn = makeButton("Cancel", { variant: "outline" });
+    const cancelBtn = makeButton("Cancel", { variant: "ghost" });
     const refineBtn = makeButton("Refine", { variant: "primary" });
 
     function submit() {
       const context = textarea.value.trim();
+      unwatchPanel(panel);
       panel.remove();
+      restackFloatingUI();
       chrome.runtime.sendMessage({ action: "replyAssistSubmit", selectedText, context });
     }
 
     function cancel() {
+      unwatchPanel(panel);
       panel.remove();
+      restackFloatingUI();
+      returnFocus(previousFocus, panel);
     }
 
     refineBtn.onclick = submit;
@@ -772,8 +989,12 @@ if (!window.lbxFixErrorsInjected) {
     closeBtn.onclick = cancel;
 
     textarea.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") { e.preventDefault(); cancel(); }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
+    });
+    // Escape closes from anywhere in the panel; Tab stays inside it.
+    panel.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); return; }
+      trapTabKey(e, panel, document);
     });
 
     footer.appendChild(hint);
@@ -783,7 +1004,11 @@ if (!window.lbxFixErrorsInjected) {
     panel.appendChild(header);
     panel.appendChild(body);
     panel.appendChild(footer);
-    document.body.appendChild(panel);
+    // Appended to <html> like the Review host, so a Reply opened while Review
+    // is open paints above it (same z-index, later in the DOM).
+    (document.documentElement || document.body).appendChild(panel);
+    watchPanel(panel);
+    restackFloatingUI();
 
     // Focus the textarea so the user can type right away.
     // The selection is already saved above, so this focus change is safe.
@@ -951,11 +1176,13 @@ if (!window.lbxFixErrorsInjected) {
   function showInlineReviewPanel(request) {
     const previous = document.getElementById("lbx-inline-review");
     if (previous?.dataset.reviewId) chrome.runtime.sendMessage({ action: "cancelReview", reviewId: previous.dataset.reviewId });
+    unwatchPanel(previous);
     previous?.remove();
+    const previousFocus = focusedElement();
     const host = document.createElement("div");
     host.id = "lbx-inline-review";
     host.dataset.reviewId = request.reviewId;
-    host.style.cssText = "all:initial;position:fixed;right:20px;bottom:20px;z-index:2147483647;";
+    host.style.cssText = "all:initial;position:fixed;right:20px;bottom:20px;max-width:calc(100% - 40px);z-index:2147483647;";
     const shadow = host.attachShadow({ mode: "open" });
     const actions = [
       ["fixGrammar", "Fix spelling & grammar"], ["addPolish", "Add polish"],
@@ -971,43 +1198,51 @@ if (!window.lbxFixErrorsInjected) {
       <style>
         :host{color-scheme:dark}
         *,*::before,*::after{box-sizing:border-box}
-        .panel{width:min(340px,calc(100vw - 40px));max-height:calc(100vh - 40px);overflow:auto;border:1px solid ${UI.border};border-radius:12px;background:${UI.bg};color:${UI.fg};font:12.5px/1.5 ${UI.font};box-shadow:${UI.shadow}}
-        .top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 11px;border-bottom:1px solid ${UI.border}}
-        .heading{min-width:0;flex:1}.heading strong{display:block;font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:${UI.fg}}
-        .heading p{margin:2px 0 0;font-size:11.5px;line-height:1.5;color:${UI.mutedFg}}
-        button,select,textarea{font:inherit;margin:0}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}
+        .panel{width:min(340px,calc(100vw - 40px));max-width:100%;max-height:calc(100vh - 40px);overflow:auto;border:1px solid ${UI.border};border-radius:${UI.radius.lg};background:${UI.bg};color:${UI.fg};font:${UI.weight.regular} ${UI.text.sm}/${UI.leading.normal} ${UI.font};letter-spacing:normal;text-align:left;box-shadow:${UI.shadow}}
+        .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:14px 12px 0 16px}
+        .heading{min-width:0;flex:1;padding-top:2px}.heading strong{display:block;font-size:${UI.text.base};font-weight:${UI.weight.semibold};line-height:${UI.leading.tight};color:${UI.fg}}
+        .heading p{margin:4px 0 0;font-size:${UI.text.sm};line-height:${UI.leading.snug};color:${UI.mutedFg}}
+        button,select,textarea{font:inherit;margin:0}button{cursor:pointer}button:disabled{opacity:${UI.disabledOpacity};cursor:default}
         svg{display:block;position:static;width:14px;height:14px;flex:0 0 14px}
-        .close{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:${UI.mutedFg}}
+        .close{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:${UI.radius.sm};background:transparent;color:${UI.mutedFg};font-size:${UI.text.sm};line-height:${UI.leading.tight}}
         .close:hover{background:${UI.muted};color:${UI.fg}}
-        .body{padding:12px 14px}
-        .toolbar{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.toolbar label{font-size:11.5px;font-weight:500;color:${UI.fg}}
-        .toolbar select{width:100%;height:32px;border:1px solid ${UI.border};border-radius:6px;background:${UI.bg};color:${UI.fg};padding:0 8px;outline:none}
-        .toolbar select:focus,textarea:focus{border-color:${UI.primary};box-shadow:0 0 0 1px ${UI.primary}}
-        .card{border:1px solid ${UI.border};border-radius:6px;background:${UI.subtle};overflow:hidden;margin-bottom:12px}
-        .card.original{border-left:2px solid ${UI.primary}}
-        .cardhead{padding:8px 10px 0;display:flex;align-items:center;justify-content:space-between;gap:8px}.cardhead b{font-size:11.5px;font-weight:500;color:${UI.fg}}
-        .tag{font-size:9px;color:${UI.mutedFg};font-weight:500;letter-spacing:.02em}
-        .text{display:block;width:100%;min-height:68px;max-height:160px;resize:vertical;border:1px solid transparent;border-radius:5px;background:transparent;color:${UI.fg};padding:8px 10px;font:12.5px/1.5 ${UI.font};outline:none}
-        .text::placeholder{color:${UI.mutedFg}}.result{min-height:86px}
-        .foot{border-top:1px solid ${UI.border};padding:5px 10px;color:${UI.mutedFg};font-size:10px}
-        .status{min-height:18px;color:${UI.mutedFg};font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}.status.error{color:${UI.destructive}}.status.good{color:${UI.success}}
-        .footer{padding:11px 14px 13px;border-top:1px solid ${UI.border}}
-        .actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}
-        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;border-radius:6px;padding:0 9px;border:1px solid ${UI.border};background:transparent;color:${UI.fg};font-size:11.5px;font-weight:500;line-height:1;white-space:nowrap}
-        .btn:hover:not(:disabled){background:${UI.muted}}.btn.primary{border-color:transparent;background:${UI.primary};color:${UI.primaryFg}}.btn.primary:hover:not(:disabled){background:${UI.primaryHover}}
-        .hint{display:flex;align-items:center;gap:4px;color:${UI.mutedFg};font-size:10px;margin:9px 0 0}
-        .hint kbd{font:10px/1.5 ${UI.mono};border:1px solid ${UI.border};background:${UI.muted};border-radius:4px;padding:1px 5px;color:${UI.mutedFg}}
+        .body{padding:14px 16px 16px}
+        .field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+        .fieldhead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:20px}
+        .lab{display:flex;align-items:center;gap:8px;min-width:0}
+        label{font-size:${UI.text.sm};font-weight:${UI.weight.medium};line-height:${UI.leading.tight};color:${UI.fg}}
+        .count{font-size:${UI.text.xs};line-height:${UI.leading.tight};color:${UI.mutedFg};font-variant-numeric:tabular-nums;white-space:nowrap}
+        select{width:100%;height:34px;border:1px solid ${UI.border};border-radius:${UI.radius.md};background:${UI.field};color:${UI.fg};padding:0 8px;font:${UI.weight.regular} ${UI.text.base}/${UI.leading.normal} ${UI.font}}
+        :focus{outline:none}:focus-visible{outline:2px solid ${UI.ring};outline-offset:2px}
+        select:focus-visible,textarea:focus-visible{border-color:${UI.ring}}
+        .text{display:block;width:100%;min-height:72px;max-height:160px;resize:vertical;border:1px solid ${UI.border};border-radius:${UI.radius.md};background:${UI.field};color:${UI.fg};padding:8px 10px;font:${UI.weight.regular} ${UI.text.base}/${UI.leading.normal} ${UI.font};transition:border-color .15s}
+        .text:disabled{color:${UI.mutedFg}}.text::placeholder{color:${UI.mutedFg}}.result{min-height:88px}
+        .badge{display:inline-flex;align-items:center;padding:1px 8px;border:1px solid ${UI.border};border-radius:${UI.radius.pill};color:${UI.mutedFg};font-size:${UI.text.xs};font-weight:${UI.weight.medium};line-height:${UI.leading.tight};white-space:nowrap}
+        .badge[data-state="success"]{color:${UI.success};border-color:${UI.successBorder}}
+        .badge[data-state="destructive"]{color:${UI.destructive};border-color:${UI.destructiveBorder}}
+        .status{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:${2 * UI.leading.snug}em;color:${UI.mutedFg};font-size:${UI.text.sm};line-height:${UI.leading.snug};overflow-wrap:anywhere}.status.error{display:block;-webkit-line-clamp:none;overflow:visible;color:${UI.destructive}}.status.good{color:${UI.success}}
+        .footer{padding:12px 16px 14px;border-top:1px solid ${UI.border}}
+        .actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:${UI.radius.md};padding:0 12px;border:1px solid transparent;background:transparent;color:${UI.fg};font-size:${UI.text.sm};font-weight:${UI.weight.medium};line-height:${UI.leading.tight};white-space:nowrap;transition:background-color .15s,color .15s}
+        .btn:hover:not(:disabled){background:${UI.muted}}
+        .btn.outline{border-color:${UI.border};background:${UI.field}}
+        .btn.primary{background:${UI.primary};color:${UI.primaryFg}}.btn.primary:hover:not(:disabled){background:${UI.primaryHover}}
+        .hint{display:flex;align-items:center;gap:4px;color:${UI.mutedFg};font-size:${UI.text.xs};line-height:${UI.leading.tight};margin:10px 0 0}
+        .hint span{margin-left:4px}
+        .hint kbd{display:inline-flex;align-items:center;font:${UI.weight.regular} ${UI.text.xs}/${UI.leading.tight} ${UI.mono};border:1px solid ${UI.border};background:${UI.muted};border-radius:${UI.radius.sm};padding:2px 7px;color:${UI.fg};white-space:nowrap}
+        .panel:focus-visible{outline:none}
+        @media (prefers-reduced-motion: reduce){${REDUCED_MOTION("*,*::before,*::after")}}
         .spin{width:12px;height:12px;flex:0 0 12px;border:2px solid ${UI.mutedFg};border-top-color:${UI.fg};border-radius:50%;display:block;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
       </style>
-      <section class="panel" role="dialog" aria-label="Review text">
-        <header class="top"><div class="heading"><strong>Review text</strong><p>Refine, review, then copy or apply.</p></div><button type="button" class="close" id="close" aria-label="Close">${ICON.x}</button></header>
+      <section class="panel" role="dialog" aria-modal="false" aria-labelledby="review-title" aria-describedby="review-desc" tabindex="-1">
+        <header class="top"><div class="heading"><strong id="review-title">Review text</strong><p id="review-desc">Refine, review, then copy or apply.</p></div><button type="button" class="close" id="close" aria-label="Close review" title="Close">${ICON.x}</button></header>
         <main class="body">
-          <div class="toolbar"><label for="action">Editing action</label><select id="action" aria-label="Choose an editing action"></select></div>
-          <section class="card original"><div class="cardhead"><b>Your text</b></div><textarea id="source" class="text" aria-label="Your text" placeholder="Type or paste text to refine…"></textarea><div class="foot"><span id="source-count">0 characters</span></div></section>
-          <section class="card"><div class="cardhead"><b>Improved version</b><span class="tag" id="badge">READY TO REVIEW</span></div><textarea id="result" class="text result" aria-label="Improved version" placeholder="Your refined text will appear here…"></textarea><div class="foot"><span id="result-count">0 characters</span></div></section>
+          <div class="field"><label for="action">Editing action</label><select id="action" aria-label="Choose an editing action"></select></div>
+          <div class="field"><div class="fieldhead"><label for="source">Your text</label><span class="count" id="source-count">0 characters</span></div><textarea id="source" class="text" aria-label="Your text" placeholder="Type or paste text to refine…"></textarea></div>
+          <div class="field"><div class="fieldhead"><span class="lab"><label for="result">Improved version</label><span class="badge" id="badge" data-state="neutral">Ready</span></span><span class="count" id="result-count">0 characters</span></div><textarea id="result" class="text result" aria-label="Improved version" placeholder="Your refined text will appear here…"></textarea></div>
           <div id="status" class="status" role="status" aria-live="polite"></div>
         </main>
-        <footer class="footer"><div class="actions"><button type="button" class="btn" id="cancel">Cancel</button><button type="button" class="btn" id="rewrite">${ICON.rotate}<span>Regenerate</span></button><button type="button" class="btn primary" id="done" disabled>Done &amp; copy</button></div><p class="hint"><kbd>Ctrl + Enter</kbd><kbd>Esc</kbd><span>Apply or close</span></p></footer>
+        <footer class="footer"><div class="actions"><button type="button" class="btn ghost" id="cancel">Cancel</button><button type="button" class="btn outline" id="rewrite">${ICON.rotate}<span>Regenerate</span></button><button type="button" class="btn primary" id="done" disabled>Done &amp; copy</button></div><p class="hint"><kbd>Ctrl + Enter</kbd><kbd>Esc</kbd><span>Apply or close</span></p></footer>
       </section>`;
     (document.documentElement || document.body).appendChild(host);
 
@@ -1027,8 +1262,15 @@ if (!window.lbxFixErrorsInjected) {
       $("result-count").textContent = `${result.value.length.toLocaleString()} characters`;
       $("done").disabled = processing || !lastResult || !result.value.trim();
     }
+    // Popup-style badge: the text says what happened, data-state picks the tint.
+    function badge(text, state = "neutral") {
+      $("badge").textContent = text;
+      $("badge").dataset.state = state;
+    }
     function status(message, type = "") {
       $("status").textContent = message;
+      // Normal states are clamped to two reserved lines (no height change); errors wrap in full.
+      $("status").title = message;
       $("status").className = `status ${type}`;
     }
     async function run() {
@@ -1037,7 +1279,7 @@ if (!window.lbxFixErrorsInjected) {
       counts();
       $("rewrite").disabled = true; actionSelect.disabled = true;
       $("rewrite").innerHTML = '<span class="spin"></span> Working';
-      $("badge").textContent = "PROCESSING";
+      badge("Processing");
       status("Working on your text…");
       try {
         const response = await chrome.runtime.sendMessage({
@@ -1048,11 +1290,11 @@ if (!window.lbxFixErrorsInjected) {
         result.value = response.text;
         if (!host.isConnected) return;
         lastResult = { tokens: response.tokens, responseTimeMs: response.responseTimeMs, action: actionSelect.value, originalText: source.value };
-        $("badge").textContent = "EDITABLE RESULT";
+        badge("Editable", "success");
         status("Ready. Make any final changes, then apply it to the page.", "good");
         counts(); result.focus();
       } catch (error) {
-        $("badge").textContent = "TRY AGAIN";
+        badge("Try again", "destructive");
         status(error.message || "Something went wrong. Please try again.", "error");
       } finally {
         processing = false; source.disabled = false;
@@ -1077,9 +1319,15 @@ if (!window.lbxFixErrorsInjected) {
     actionSelect.addEventListener("change", () => { if (source.value.trim()) run(); });
     function closeReview({ restore = true } = {}) {
       chrome.runtime.sendMessage({ action: "cancelReview", reviewId: request.reviewId });
+      const hadFocus = host.contains(document.activeElement);
+      unwatchPanel(host);
       host.remove();
+      restackFloatingUI();
       cancelCurrentReview = null;
-      if (restore) restoreSavedSelection();
+      if (restore) {
+        restoreSavedSelection();
+        if (hadFocus && !savedSelectionInfo?.element?.isConnected) returnFocus(previousFocus, host);
+      }
     }
     $("cancel").addEventListener("click", () => closeReview());
     $("close").addEventListener("click", () => closeReview());
@@ -1097,9 +1345,15 @@ if (!window.lbxFixErrorsInjected) {
         });
         if (!response?.ok) throw new Error(response?.error || "Could not apply the result.");
         status(response.replaced ? "Applied to the page and copied to your clipboard." : "Copied to your clipboard. Paste it where you need it.", "good");
-        $("badge").textContent = "APPLIED";
+        badge("Applied", "success");
         cancelCurrentReview = null;
-        setTimeout(() => host.remove(), 600);
+        setTimeout(() => {
+          const hadFocus = host.contains(document.activeElement);
+          unwatchPanel(host);
+          host.remove();
+          restackFloatingUI();
+          if (hadFocus) returnFocus(previousFocus, host);
+        }, 600);
       } catch (error) {
         status(error.message || "Could not apply the result.", "error");
         $("done").disabled = false; $("done").textContent = "Done & copy";
@@ -1113,10 +1367,16 @@ if (!window.lbxFixErrorsInjected) {
       if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation();
         $("cancel").click();
+        return;
       }
+      trapTabKey(event, shadow.querySelector(".panel"), shadow);
     });
 
+    watchPanel(host);
+    restackFloatingUI();
     counts();
+    // Move focus into the dialog; run() moves it on to the result when ready.
+    shadow.querySelector(".panel").focus({ preventScroll: true });
     if (!request.original?.trim()) {
       status(request.canReplace
         ? "Nothing selected. Type text above; the result will be inserted at your cursor."

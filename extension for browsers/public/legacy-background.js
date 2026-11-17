@@ -212,6 +212,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === "commitReview") {
     commitReview(request).then(result => sendResponse({ ok: true, ...result })).catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
+  } else if (request.action === "summarizeMistakes") {
+    summarizeMistakes().then(summary => sendResponse({ ok: true, summary })).catch(error => sendResponse({ ok: false, error: error.message || "Could not summarize your mistakes." }));
+    return true;
   } else if (request.action === "cancelReview") {
     reviewControllers.get(request.reviewId)?.abort();
     chrome.storage.session.remove(`review:${request.reviewId}`);
@@ -393,6 +396,28 @@ async function commitReview(request) {
   return { replaced };
 }
 
+const SUMMARY_MIN_MISTAKES = 3;
+
+// Asks the configured AI what the most frequent corrections have in common.
+// Only the correction pairs and their counts are sent, never whole messages.
+async function summarizeMistakes() {
+  const mistakes = await loadMistakes();
+  const top = topMistakes(mistakes, 40);
+  if (top.length < SUMMARY_MIN_MISTAKES) throw new Error("Not enough corrections yet. Fix a few more texts first.");
+  const lines = top.map(item => `- ${MISTAKE_KIND_LABELS[item.kind] || item.kind}: ${correctionText(item)} (${item.count}x)`).join("\n");
+  const prompt = "These are the corrections most often made to my writing, with how many times each happened. " +
+    "The texts can be in several languages.\n\n" + lines + "\n\n" +
+    "In at most 5 short bullet points starting with \"• \", tell me which mistakes I repeat and give one practical tip for each. " +
+    "Group similar corrections into one pattern. Write in English, plain text only, no Markdown, no introduction.";
+  const settings = await chrome.storage.local.get(PROVIDER_SETTING_KEYS);
+  const result = await callConfiguredAI(prompt, settings, "aiPrompt", null, "", null, null, requestTimeoutMs(settings));
+  if (!result.text) throw new Error("The AI returned no summary. Please try again.");
+  const summary = { text: result.text, at: new Date().toISOString(), analyzed: mistakes.analyzed };
+  // Saved so the summary is still there if the popup closed while waiting.
+  await chrome.storage.local.set({ mistakesSummary: summary });
+  return summary;
+}
+
 // A shortcut that finds no text used to do nothing at all, which is indis-
 // tinguishable from the extension being broken. Say which of the three reasons
 // it was, so the fix is obvious from the toast alone.
@@ -428,8 +453,6 @@ const EN_TO_UA_MAP = {
   'Z':'Я','X':'Ч','C':'С','V':'М','B':'И','N':'Т','M':'Ь'
 };
 
-const HISTORY_LIMIT = 50;
-
 // Detailed history only keeps the most recent HISTORY_LIMIT entries. Anything
 // older is folded into lifetimeStats so aggregate totals survive forever.
 async function addHistoryEntry(entry) {
@@ -450,6 +473,8 @@ async function addHistoryEntry(entry) {
   }
 
   await chrome.storage.local.set({ history: kept });
+  // The mistakes dictionary is a bonus; a failure there must not lose the edit.
+  await learnFromHistoryEntry(entry).catch(error => console.warn("Could not learn from this edit:", error));
 }
 
 function translitKeyboard(text) {
@@ -500,7 +525,8 @@ async function applyGeneratedText(tabId, originalText, fixedText, frameId = 0) {
 
 // Say why a result was not applied; the Copy button keeps the result usable.
 function outcomeToast(outcome, fixedText, successMessage) {
-  if (outcome.replaced) return { action: "showToast", message: successMessage, type: "success" };
+  // A message that lists corrections needs longer on screen than a bare "Done!".
+  if (outcome.replaced) return { action: "showToast", message: successMessage, type: "success", durationMs: successMessage.length > 24 ? 7000 : undefined };
   return {
     action: "showToast",
     message: `Not applied: ${outcome.error || "the page did not accept the text."}`,
@@ -581,7 +607,9 @@ async function processTextWithAI(originalText, tab, action, context = "", modelO
       responseTimeMs
     });
 
-    notifyTab(tab.id, outcomeToast(outcome, fixedText, "Done!"));
+    // After a grammar fix the toast names what was wrong, e.g. "teh → the".
+    const doneMessage = action === "fixGrammar" ? fixSummaryMessage(originalText, fixedText) : "Done!";
+    notifyTab(tab.id, outcomeToast(outcome, fixedText, doneMessage));
   } catch (error) {
     if (controller.superseded) return;
     if (isAbortError(error)) {

@@ -1,0 +1,44 @@
+Fix Errors AI fixes, rewrites and translates the text you select on any website, right where you typed it. No copying into a separate chat window and back.
+
+Select text in an email, chat, comment box or any other editable field. Pick an action from the "AI Text Tools" right-click menu or press a keyboard shortcut. The result replaces your selection in place.
+
+WHAT IT CAN DO
+• Fix spelling and grammar
+• Add polish: more professional, more eloquent
+• Change tone: formal, casual, empathetic, or with emojis
+• Rewrite as an official business email
+• Make shorter or make longer
+• Translate to Polish, Ukrainian or American English, with grammar fixed on the way
+• Format as Markdown or as a Slack message
+• Fix keyboard-layout mix-ups (Ukrainian ↔ English) when you typed in the wrong layout. This runs on your device and makes no AI request.
+
+REVIEW BEFORE YOU APPLY
+Choose "Review before applying…" or press Alt+Shift+R to open a small editing panel on the page. Pick any action, read and edit the improved version, regenerate it if you like, then press "Done & copy" to copy it and put it back into the field. The panel also opens with nothing selected, so you can type or paste text, and it can send your text to the AI as a one-off prompt.
+
+REPLY ASSIST
+Select your draft reply and press Alt+Shift+A. Paste the message you're answering, or describe the tone you want, and Reply Assist rewrites your draft to fit the conversation without adding ideas you didn't write.
+
+KEYBOARD SHORTCUTS
+• Alt+Shift+F: fix spelling and grammar (optionally selects the whole field first)
+• Alt+Shift+G: fix the selected text immediately
+• Alt+Shift+A: Reply Assist
+• Alt+Shift+R: review before applying
+• Alt+Shift+Esc: cancel a running request and leave your text unchanged
+These are suggested defaults. If Chrome or another extension already uses one, it shows as "Not set": assign or change any of them at chrome://extensions/shortcuts.
+
+BRING YOUR OWN AI
+Fix Errors AI has no AI service or server of its own. Choose the provider:
+• Google Gemini with your own API key. Google's terms, quotas and any charges apply.
+• LM Studio running on your own computer (localhost), so your text never leaves your machine.
+Set an optional fallback provider for when the main model fails, set personal request and token budgets per model, and edit the instruction behind every action in the Prompts tab. If a model is busy or times out, a retry picker lets you try another model without selecting the text again.
+
+HISTORY ON YOUR DEVICE
+The History tab keeps your last 50 edits and all-time totals (edits, time, tokens) so you can review or copy a past result. Clear it at any time.
+
+PRIVACY
+• Your API key, settings, prompts and history are stored only in this browser (chrome.storage.local).
+• The text you select, and any context you type into Reply Assist, is sent only to the provider you chose, only when you run an action.
+• The extension runs on a page only after you use it there. It does not read pages in the background, and there are no analytics, ads or tracking.
+Privacy policy: https://sanekxarcs.github.io/fix-errors-ex/landing-page/privacy.html
+
+Some sites block programmatic editing. When a result can't be written back, Fix Errors AI keeps your original text and offers a "Copy result" button instead.

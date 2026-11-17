@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const files = new Set(['background.js', 'constants.js', 'model-limits.js', 'content.js', 'popup.js', 'popup.html', 'popup.css']);
+const files = new Set(['background.js', 'constants.js', 'model-limits.js', 'learning.js', 'content.js', 'popup.js', 'popup.html', 'popup.css']);
 let timer;
 let queue = Promise.resolve();
 function sync() {

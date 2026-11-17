@@ -1,0 +1,26 @@
+Fix Errors AI has no account and no server of its own. To see it work you need ONE of these AI providers:
+
+A) Google Gemini (fastest to set up)
+   1. Create a free API key at https://aistudio.google.com/app/apikey
+   2. Click the extension icon. Settings tab > AI provider: Gemini > paste the key into "API key" > pick a model (for example gemini-2.5-flash) > Save.
+
+B) LM Studio (offline)
+   1. Install LM Studio, load any chat model, and start the local server (default http://localhost:1234).
+   2. Click the extension icon. Settings tab > AI provider: LM Studio > keep the default address > pick the model > Save.
+
+Before testing, open chrome://extensions/shortcuts and check that all four Fix Errors AI shortcuts are assigned. In a fresh Chromium profile we saw Alt+Shift+A (Reply Assist) and Alt+Shift+R (Review) left as "Not set" because the browser reserves them; assign any free keys there. Reply Assist is opened only by its shortcut.
+
+Test steps (any page with a text field; for example a Gmail draft or https://www.w3schools.com/tags/tryit.asp?filename=tryhtml_textarea):
+1. Type: "I recieve teh files yesterday and they was wierd."
+2. Select the text, right-click, then choose AI Text Tools > Fix spelling and grammar. A small "working" toast shows in the bottom-right corner, then the selection is replaced with the corrected text.
+3. Select the text again and press Alt+Shift+R (or right-click > AI Text Tools > Review before applying...). A panel opens; choose another action (for example "Translate to Ukrainian"), edit the result if you like, and press "Done & copy" to put it back.
+4. Select a sentence and press the Reply Assist shortcut (Alt+Shift+A by default). Type a short note such as "reply politely, I'm declining", then press Refine.
+5. Right-click > AI Text Tools > Change tone, Make shorter, Translate and Format work the same way.
+6. Right-click > AI Text Tools > Fix keyboard layout (UA<->EN) converts text typed in the wrong layout locally, with no AI request. Try "ghbdsn" -> "привіт".
+7. Click the extension icon > History tab to see the edits you just made (stored only in this browser). Prompts tab shows the editable instruction for each action.
+
+Notes
+- The extension injects its script only after a menu click or shortcut, in that tab (activeTab + scripting). It does not run on pages in the background.
+- Press Alt+Shift+Esc or the X on the toast to cancel a running request.
+- Some sites block programmatic editing; then the toast offers "Copy result" instead of replacing the text.
+- Shortcuts can be changed at chrome://extensions/shortcuts.
